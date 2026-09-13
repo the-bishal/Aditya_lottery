@@ -1,0 +1,107 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Global CSS — Aditya Lottery Admin Dashboard
+   Handles: animations, utility classes, print styles, a11y
+   Most styling is done via MUI theme overrides in theme.js
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Box model ────────────────────────────────────────────────────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+/* ── Animations ─────────────────────────────────────────────────────────── */
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50%       { transform: translateY(-5px); }
+}
+
+@keyframes glow-pulse {
+  0%, 100% { box-shadow: 0 0 12px rgba(245,197,24,0.20), 0 8px 24px rgba(0,0,0,0.4); }
+  50%       { box-shadow: 0 0 28px rgba(245,197,24,0.45), 0 8px 32px rgba(0,0,0,0.5); }
+}
+
+@keyframes twinkle {
+  0%, 100% { opacity: 0.12; transform: scale(0.9); }
+  50%       { opacity: 0.55; transform: scale(1.3); }
+}
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes shimmer {
+  0%   { background-position: -600px 0; }
+  100% { background-position: 600px 0; }
+}
+
+/* ── Page entry animation ─────────────────────────────────────────────── */
+.page-content {
+  animation: fadeInUp 0.3s ease both;
+}
+
+/* ── Drop zone ───────────────────────────────────────────────────────────── */
+.drop-zone-active {
+  border-color: #F5C518 !important;
+  background: rgba(245,197,24,0.06) !important;
+  transform: scale(1.008);
+  transition: all 0.2s ease !important;
+}
+
+/* ── Scrollable number list ──────────────────────────────────────────────── */
+.number-list-scroll {
+  max-height: 380px;
+  overflow-y: auto;
+  padding-right: 2px;
+  /* Custom thin scrollbar */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(245,197,24,0.2) transparent;
+}
+
+.number-list-scroll::-webkit-scrollbar { width: 4px; }
+.number-list-scroll::-webkit-scrollbar-track { background: transparent; }
+.number-list-scroll::-webkit-scrollbar-thumb {
+  background: rgba(245,197,24,0.2);
+  border-radius: 2px;
+}
+
+/* ── Skeleton loading shimmer ────────────────────────────────────────────── */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    rgba(255,255,255,0.04) 0%,
+    rgba(255,255,255,0.08) 50%,
+    rgba(255,255,255,0.04) 100%
+  );
+  background-size: 600px 100%;
+  animation: shimmer 1.6s linear infinite;
+  border-radius: 8px;
+}
+
+/* ── Print styles ────────────────────────────────────────────────────────── */
+@media print {
+  header, nav, .no-print { display: none !important; }
+  body { background: white !important; color: black !important; }
+}
+
+/* ── Responsive images ────────────────────────────────────────────────────── */
+img { max-width: 100%; height: auto; display: block; }
+
+/* ── Ensure monospace is readable ────────────────────────────────────────── */
+code {
+  font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+  background: rgba(245,197,24,0.08);
+  border: 1px solid rgba(245,197,24,0.15);
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-size: 0.85em;
+  color: #F5C518;
+}
