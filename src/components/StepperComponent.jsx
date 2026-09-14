@@ -62,6 +62,8 @@ import {
 } from '../utils/exclusionCodes';
 import { runOCR } from '../utils/ocrScanner';
 import { captureElement } from '../utils/imageGenerator';
+import { runAutoFill } from '../utils/autoFillEngine';
+import { persistResultData } from '../utils/apiClient';
 import { tokens } from '../theme';
 
 const STEPS = ['Exclude Codes', 'Place Winning Numbers', 'Generate Result'];
@@ -192,10 +194,23 @@ function StepExclude({ onNext }) {
           }
           onClick={handleExtract}
           disabled={processing || !excludedRangeText.trim()}
-          sx={{ minWidth: 160 }}
+          sx={{ minWidth: 160, fontWeight: 700 }}
         >
-          {processing ? 'Extracting…' : 'Extract Codes'}
+          {processing ? 'Extracting…' : 'Extract & Apply'}
         </Button>
+        {excludedRangeText && (
+          <Button
+            variant="outlined"
+            color="secondary"
+            onClick={() => {
+              setExcludedRangeText('');
+              setApplied(false);
+              useLotteryStore.getState().applyExclusionCodes('');
+            }}
+          >
+            Clear
+          </Button>
+        )}
       </Box>
 
       {applied && codes.length > 0 && (
@@ -692,6 +707,17 @@ function StepNumbers({ onNext, onBack }) {
     ocrStatus,
     setOcrProgress,
     setOcrStatus,
+    generationStatus,
+    setGenerationStatus,
+    placementStatus,
+    setPlacementStatus,
+    saveStatus,
+    setSaveStatus,
+    saveError,
+    setSaveError,
+    autoFillLogs,
+    setAutoFillLogs,
+    appendAutoFillLog,
   } = useLotteryStore();
 
   const [dragOver, setDragOver]           = useState(false);
@@ -838,6 +864,78 @@ function StepNumbers({ onNext, onBack }) {
     setOcrStatus('idle');
     setOcrProgress(0);
   }, [clearOcrEntries, clearUploadedImageURLs, setOcrStatus, setOcrProgress]);
+
+  // ── Auto-fill Remaining Slots (Decoupled generation & safe save) ─────────────
+  const handleAutoFill = useCallback(async () => {
+    setGenerationStatus('generating');
+    setSaveError('');
+
+    const currentState = useLotteryStore.getState();
+    const fillResult = runAutoFill({
+      rankArrays: currentState.rankArrays,
+      excludedCodeSet: currentState.excludedCodeSet,
+    });
+
+    // 1. Update rank arrays with generated numbers
+    setRankArrays(fillResult.rankArrays);
+    setGenerationStatus('success');
+    setPlacementStatus('success');
+    setAutoFillLogs(fillResult.logLines);
+
+    // 2. Persist to server / API safely
+    setSaveStatus('saving');
+    try {
+      const payload = {
+        drawDate: currentState.resultDate,
+        drawNumber: currentState.drawNumber,
+        resultTitle: currentState.resultTitle,
+        rankArrays: fillResult.rankArrays,
+        totalWinners: fillResult.totalPlaced,
+      };
+      const res = await persistResultData(payload);
+      setSaveStatus('saved');
+      appendAutoFillLog(res.message || '✓ Result saved successfully to server');
+    } catch (err) {
+      console.warn('Server save error caught safely:', err.message);
+      setSaveStatus('error');
+      setSaveError(err.message);
+      appendAutoFillLog(`⚠️ Server save failed: ${err.message}`);
+    }
+  }, [setRankArrays, setGenerationStatus, setPlacementStatus, setAutoFillLogs, setSaveStatus, setSaveError, appendAutoFillLog]);
+
+  // ── Retry Save (Safe idempotency — retries save without regenerating numbers) ──
+  const handleRetrySave = useCallback(async () => {
+    setSaveStatus('saving');
+    setSaveError('');
+    appendAutoFillLog('Retrying save to server…');
+
+    const currentState = useLotteryStore.getState();
+    const total =
+      countFilled(currentState.rankArrays['1CR']) +
+      countFilled(currentState.rankArrays['2ND']) +
+      countFilled(currentState.rankArrays['3RD']) +
+      countFilled(currentState.rankArrays['4TH']) +
+      countFilled(currentState.rankArrays['5TH']);
+
+    const payload = {
+      drawDate: currentState.resultDate,
+      drawNumber: currentState.drawNumber,
+      resultTitle: currentState.resultTitle,
+      rankArrays: currentState.rankArrays,
+      totalWinners: total,
+    };
+
+    try {
+      const res = await persistResultData(payload);
+      setSaveStatus('saved');
+      appendAutoFillLog(res.message || '✓ Result saved successfully to server');
+    } catch (err) {
+      console.warn('Retry save error caught safely:', err.message);
+      setSaveStatus('error');
+      setSaveError(err.message);
+      appendAutoFillLog(`⚠️ Retry failed: ${err.message}`);
+    }
+  }, [setSaveStatus, setSaveError, appendAutoFillLog]);
 
   // Derived counts for display
   const entryCount   = ocrEntries.length;
@@ -1102,37 +1200,182 @@ function StepNumbers({ onNext, onBack }) {
         </Box>
       </Paper>
 
-      {/* ── Place in Ranks button ── */}
-      {hasEntries && (
-        <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center', flexWrap: 'wrap' }}>
+      {/* ── Action Buttons: Place in Ranks, Run Auto-Fill & Reset ── */}
+      <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center', flexWrap: 'wrap' }}>
+        {hasEntries && (
           <Button
             variant="contained"
             color="primary"
             size="large"
             startIcon={<CheckCircleIcon />}
             onClick={handlePlaceInRanks}
-            sx={{ minWidth: 180, fontWeight: 700 }}
+            sx={{ minWidth: 170, fontWeight: 700 }}
             aria-label="Place all reviewed OCR entries into their assigned rank fields"
           >
             Place in Ranks
           </Button>
-          {hasAnyFilled && (
-            <Button
-              variant="outlined"
-              color="secondary"
-              size="large"
-              startIcon={<RefreshIcon />}
-              onClick={() => {
-                useLotteryStore.getState().resetRankArrays();
-                setPlacementResult(null);
-                setShowSummary(false);
+        )}
+
+        <Button
+          variant="contained"
+          color="secondary"
+          size="large"
+          startIcon={
+            generationStatus === 'generating' || saveStatus === 'saving' ? (
+              <CircularProgress size={18} color="inherit" />
+            ) : (
+              <AutoAwesomeIcon />
+            )
+          }
+          onClick={handleAutoFill}
+          disabled={generationStatus === 'generating' || saveStatus === 'saving'}
+          sx={{
+            minWidth: 200,
+            fontWeight: 700,
+            background: `linear-gradient(135deg, ${tokens.goldDark}, ${tokens.gold})`,
+            color: '#000',
+            '&:hover': { background: `linear-gradient(135deg, ${tokens.gold}, ${tokens.goldLight})` },
+          }}
+          aria-label="Auto-fill remaining prize ranks up to 141 winners"
+        >
+          {generationStatus === 'generating'
+            ? 'Generating…'
+            : saveStatus === 'saving'
+            ? 'Saving to Server…'
+            : 'Run Auto-Fill (Fill to 141)'}
+        </Button>
+
+        {hasAnyFilled && (
+          <Button
+            variant="outlined"
+            color="secondary"
+            size="large"
+            startIcon={<RefreshIcon />}
+            onClick={() => {
+              useLotteryStore.getState().resetRankArrays();
+              setPlacementResult(null);
+              setShowSummary(false);
+              setGenerationStatus('idle');
+              setSaveStatus('idle');
+              setSaveError('');
+              useLotteryStore.getState().clearAutoFillLogs();
+            }}
+            sx={{ minWidth: 140 }}
+          >
+            Reset Ranks
+          </Button>
+        )}
+      </Box>
+
+      {/* ── Operational Log & Status Console (Matches Screenshot) ── */}
+      {autoFillLogs.length > 0 && (
+        <Paper
+          sx={{
+            p: 2.5,
+            background: '#0B0F19',
+            border: '1px solid rgba(255,255,255,0.12)',
+            borderRadius: '12px',
+            fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
+            fontSize: '0.85rem',
+            boxShadow: 'inset 0 2px 8px rgba(0,0,0,0.6)',
+          }}
+        >
+          {/* Status Header */}
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              mb: 1.5,
+              pb: 1,
+              borderBottom: '1px solid rgba(255,255,255,0.08)',
+              flexWrap: 'wrap',
+              gap: 1,
+            }}
+          >
+            <Typography variant="caption" sx={{ color: tokens.textMuted, fontFamily: 'monospace', fontWeight: 600 }}>
+              TERMINAL LOG & SERVER STATUS
+            </Typography>
+            <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap' }}>
+              {generationStatus === 'success' && (
+                <Chip size="small" label="✓ Generation OK" color="success" sx={{ height: 22, fontSize: '0.7rem' }} />
+              )}
+              {placementStatus === 'success' && (
+                <Chip size="small" label="✓ 141 Placed" color="success" sx={{ height: 22, fontSize: '0.7rem' }} />
+              )}
+              {saveStatus === 'saving' && (
+                <Chip size="small" label="Saving to Server…" color="info" sx={{ height: 22, fontSize: '0.7rem' }} />
+              )}
+              {saveStatus === 'saved' && (
+                <Chip size="small" label="✓ Saved" color="success" sx={{ height: 22, fontSize: '0.7rem' }} />
+              )}
+              {saveStatus === 'error' && (
+                <Chip size="small" label="⚠️ Server Save Failed" color="warning" sx={{ height: 22, fontSize: '0.7rem' }} />
+              )}
+            </Box>
+          </Box>
+
+          {/* Console Log Lines */}
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+            {autoFillLogs.map((log, idx) => {
+              const isError = log.startsWith('⚠️') || log.startsWith('Error') || log.includes('failed');
+              const isSuccess =
+                log.startsWith('✓') ||
+                log.startsWith('Auto-generated') ||
+                log.startsWith('Fill done') ||
+                log.startsWith('Placed');
+              return (
+                <Typography
+                  key={idx}
+                  sx={{
+                    fontFamily: 'inherit',
+                    fontSize: '0.85rem',
+                    lineHeight: 1.8,
+                    color: isError ? '#FF6B6B' : isSuccess ? '#4ECCA3' : tokens.textSecondary,
+                  }}
+                >
+                  {log}
+                </Typography>
+              );
+            })}
+          </Box>
+
+          {/* Separate Recovery / Retry Bar when Server Save Fails */}
+          {saveStatus === 'error' && (
+            <Box
+              sx={{
+                mt: 2,
+                pt: 1.5,
+                borderTop: '1px solid rgba(255,255,255,0.08)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: 1.5,
               }}
-              sx={{ minWidth: 140 }}
             >
-              Reset Ranks
-            </Button>
+              <Box>
+                <Typography variant="body2" sx={{ color: '#FFB86C', fontWeight: 600, fontSize: '0.82rem' }}>
+                  Numbers generated and placed successfully (100% safe locally).
+                </Typography>
+                <Typography variant="caption" sx={{ color: tokens.textMuted, display: 'block' }}>
+                  {saveError || 'Backend endpoint returned an invalid response.'}
+                </Typography>
+              </Box>
+              <Button
+                variant="outlined"
+                color="warning"
+                size="small"
+                startIcon={<RefreshIcon />}
+                onClick={handleRetrySave}
+                disabled={saveStatus === 'saving'}
+                sx={{ fontWeight: 700, fontSize: '0.75rem', px: 2 }}
+              >
+                {saveStatus === 'saving' ? 'Retrying…' : 'Retry Save'}
+              </Button>
+            </Box>
           )}
-        </Box>
+        </Paper>
       )}
 
       {/* ── Placement Summary ── */}
@@ -1285,9 +1528,9 @@ function StepGenerate({ onBack }) {
   };
   const RANK_DISPLAY_COLORS = {
     '1CR': '#FFD700',
-    '2ND': '#C0C0C0',
-    '3RD': '#CD7F32',
-    '4TH': tokens.gold,
+    '2ND': '#00E5FF',
+    '3RD': '#FFA100',
+    '4TH': '#B388FF',
     '5TH': tokens.gold,
   };
 
@@ -1365,17 +1608,17 @@ function StepGenerate({ onBack }) {
         {/* Header */}
         <Box sx={{ textAlign: 'center', mb: 3 }}>
           <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 1.5, mb: 1 }}>
-            <EmojiEventsIcon sx={{ color: tokens.gold, fontSize: 30 }} />
+            <EmojiEventsIcon sx={{ color: tokens.gold, fontSize: 32 }} />
             <Typography
               component="h2"
               sx={{
-                fontWeight: 800,
-                background: `linear-gradient(90deg, ${tokens.gold}, ${tokens.goldLight}, ${tokens.gold})`,
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
-                backgroundClip: 'text',
-                fontSize: { xs: '1.3rem', sm: '1.7rem' },
+                fontWeight: 900,
+                color: tokens.gold,
+                fontSize: { xs: '1.4rem', sm: '1.9rem' },
+                letterSpacing: '0.04em',
+                textTransform: 'uppercase',
                 lineHeight: 1.2,
+                textShadow: '0 0 24px rgba(245,197,24,0.35)',
               }}
             >
               {resultTitle || 'Lottery Result'}
@@ -1401,25 +1644,28 @@ function StepGenerate({ onBack }) {
           filledRanks.map((rank) => {
             const numbers = rankArrays[rank] ?? [];
             const color   = RANK_DISPLAY_COLORS[rank];
+            const is1Cr   = rank === '1CR';
             return (
               <Box key={rank} sx={{ mb: 2.5 }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.2 }}>
                   <Box
                     sx={{
-                      width: 7,
-                      height: 7,
+                      width: 8,
+                      height: 8,
                       borderRadius: '50%',
                       background: color,
+                      boxShadow: `0 0 8px ${color}`,
                       flexShrink: 0,
                     }}
                   />
                   <Typography
                     variant="subtitle2"
                     sx={{
-                      fontWeight: 700,
+                      fontWeight: 800,
                       color,
                       textTransform: 'capitalize',
                       letterSpacing: '0.02em',
+                      fontSize: '0.9rem',
                     }}
                   >
                     {RANK_DISPLAY_LABELS[rank]}
@@ -1428,23 +1674,48 @@ function StepGenerate({ onBack }) {
                     ({numbers.length} winner{numbers.length !== 1 ? 's' : ''})
                   </Typography>
                 </Box>
-                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, pl: 2.5 }}>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: is1Cr ? 1.5 : 0.85, pl: { xs: 0.5, sm: 2 } }}>
                   {numbers.map((num, ni) => (
-                    <Chip
+                    <Box
                       key={`${num}-${ni}`}
-                      label={num}
-                      size="small"
+                      data-prize-badge="true"
+                      data-rank={rank}
                       sx={{
-                        fontFamily: 'monospace',
-                        fontWeight: 700,
-                        fontSize: '0.83rem',
-                        height: 26,
-                        background: `${color}1A`,
-                        color,
-                        border: `1px solid ${color}44`,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        height: is1Cr ? 36 : 28,
+                        minWidth: is1Cr ? 116 : rank === '2ND' ? 66 : 52,
+                        px: is1Cr ? 1.5 : 1,
+                        py: 0,
                         borderRadius: '6px',
+                        background: `${color}18`,
+                        border: `1.5px solid ${color}55`,
+                        color,
+                        fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
+                        fontWeight: 700,
+                        fontSize: is1Cr ? '1.05rem' : '0.86rem',
+                        lineHeight: 1,
+                        letterSpacing: 0,
+                        fontVariantNumeric: 'tabular-nums',
+                        textAlign: 'center',
+                        boxShadow: '0 2px 6px rgba(0,0,0,0.35)',
+                        transition: 'transform 0.1s ease',
+                        userSelect: 'none',
                       }}
-                    />
+                    >
+                      <span
+                        style={{
+                          display: 'inline-block',
+                          lineHeight: 1,
+                          textAlign: 'center',
+                          verticalAlign: 'middle',
+                          marginTop: '-1px', // visual cap-height adjustment for monospace digit baseline
+                        }}
+                      >
+                        {num}
+                      </span>
+                    </Box>
                   ))}
                 </Box>
               </Box>
@@ -1552,12 +1823,68 @@ function CustomStepIcon({ active, completed, icon }) {
 // ── Main Stepper Shell ────────────────────────────────────────────────────────
 export default function StepperComponent() {
   const [activeStep, setActiveStep] = useState(0);
+  const [session, setSession] = useState('MORNING');
+  const { resultDate, setResultDate, drawNumber, setDrawNumber } = useLotteryStore();
 
   const next = () => setActiveStep((s) => s + 1);
   const back = () => setActiveStep((s) => s - 1);
 
   return (
     <Box>
+      {/* ── Draw Config Bar (Matches Screenshot) ── */}
+      <Paper
+        sx={{
+          p: 2,
+          mb: 3,
+          background: 'rgba(255,255,255,0.02)',
+          border: `1px solid ${tokens.border}`,
+          borderRadius: '12px',
+        }}
+      >
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1.5, mb: 1.5 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Chip
+              label={session}
+              color="error"
+              size="small"
+              onClick={() => {
+                const nextSession = session === 'MORNING' ? 'DAY' : session === 'DAY' ? 'EVENING' : 'MORNING';
+                setSession(nextSession);
+              }}
+              sx={{ fontWeight: 800, fontSize: '0.75rem', height: 26, cursor: 'pointer' }}
+            />
+            <Chip
+              label={`DRAW ${drawNumber || '1'}`}
+              variant="outlined"
+              size="small"
+              sx={{ fontWeight: 800, fontSize: '0.75rem', height: 26, color: tokens.gold, borderColor: tokens.goldBorder }}
+            />
+          </Box>
+          <Typography variant="caption" sx={{ color: tokens.textMuted, fontFamily: 'monospace' }}>
+            {resultDate}
+          </Typography>
+        </Box>
+
+        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
+          <TextField
+            label="DRAW DATE"
+            type="date"
+            size="small"
+            value={resultDate}
+            onChange={(e) => setResultDate(e.target.value)}
+            InputLabelProps={{ shrink: true }}
+            inputProps={{ 'aria-label': 'Select draw date' }}
+          />
+          <TextField
+            label="DRAW NUMBER"
+            size="small"
+            value={drawNumber}
+            onChange={(e) => setDrawNumber(e.target.value)}
+            inputProps={{ 'aria-label': 'Enter draw number', inputMode: 'numeric' }}
+          />
+        </Box>
+      </Paper>
+
       {/* ── Stepper header ── */}
       <Stepper
         activeStep={activeStep}

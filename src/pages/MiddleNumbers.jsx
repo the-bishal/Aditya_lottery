@@ -5,87 +5,201 @@ import Typography from '@mui/material/Typography';
 import Paper from '@mui/material/Paper';
 import Button from '@mui/material/Button';
 import TextField from '@mui/material/TextField';
-import Slider from '@mui/material/Slider';
 import Chip from '@mui/material/Chip';
 import Alert from '@mui/material/Alert';
 import Divider from '@mui/material/Divider';
 import Tooltip from '@mui/material/Tooltip';
 import IconButton from '@mui/material/IconButton';
+import CircularProgress from '@mui/material/CircularProgress';
+import Stack from '@mui/material/Stack';
+import Snackbar from '@mui/material/Snackbar';
+import Tab from '@mui/material/Tab';
+import Tabs from '@mui/material/Tabs';
 import FormatListNumberedIcon from '@mui/icons-material/FormatListNumbered';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import CheckIcon from '@mui/icons-material/Check';
-import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
+import VerifiedIcon from '@mui/icons-material/Verified';
+import RestartAltIcon from '@mui/icons-material/RestartAlt';
+import TerminalIcon from '@mui/icons-material/Terminal';
+import DashboardCustomizeIcon from '@mui/icons-material/DashboardCustomize';
+
 import useLotteryStore from '../store/useLotteryStore';
-import { computeMiddleNumbers } from '../utils/numberParser';
+import {
+  generateMiddleSets,
+  verifyMiddleSets,
+  formatSetsForClipboard,
+} from '../utils/middleNumbersEngine';
 import PageHeader from '../components/PageHeader';
 import { tokens } from '../theme';
 
-const ACCENT  = tokens.purple;
-const ACCENT_BG     = 'rgba(142,68,173,0.12)';
-const ACCENT_BORDER = 'rgba(142,68,173,0.22)';
+const ACCENT = tokens.purple;
+const ACCENT_BG = 'rgba(142,68,173,0.12)';
+const ACCENT_BORDER = 'rgba(142,68,173,0.25)';
+
+// Color mapping for prize denomination badges
+const PRIZE_COLORS = {
+  '200': '#FFD700', // Gold
+  '100': '#00E5FF', // Cyan
+  '50':  '#FFA100', // Amber
+  '25':  '#B388FF', // Violet
+  '10':  '#2ECC71', // Green
+  '5':   '#F5C518', // Warm Yellow
+};
 
 export default function MiddleNumbers() {
   const {
-    middleRangeStart, middleRangeEnd, middleNumbers,
-    setMiddleRangeStart, setMiddleRangeEnd, setMiddleNumbers,
+    middleSetCount,
+    middleGeneratedSets,
+    middleVerificationStatus,
+    middleVerificationErrors,
+    middleIsGenerating,
+    setMiddleSetCount,
+    setMiddleGeneratedSets,
+    setMiddleVerificationStatus,
+    setMiddleVerificationErrors,
+    setMiddleIsGenerating,
+    resetMiddleNumbers,
+    excludedCodeSet,
   } = useLotteryStore();
 
-  const [count, setCount]   = useState(10);
-  const [copied, setCopied] = useState(false);
-  const [error, setError]   = useState('');
+  const [inputError, setInputError] = useState('');
+  const [copySuccess, setCopySuccess] = useState(false);
+  const [copyMessage, setCopyMessage] = useState('');
+  const [activeTab, setActiveTab] = useState(0); // 0: Visual Cards, 1: Raw Output
 
-  const handleCompute = useCallback(() => {
-    setError('');
-    const s = parseInt(middleRangeStart, 10);
-    const e = parseInt(middleRangeEnd, 10);
+  // Validate user sets input
+  const validateInput = useCallback((val) => {
+    if (!val || String(val).trim() === '') {
+      return 'Please enter the number of sets to generate.';
+    }
+    if (String(val).includes('.') || String(val).includes(',')) {
+      return 'Number of sets must be a whole integer, not a decimal.';
+    }
+    const n = parseInt(val, 10);
+    if (isNaN(n) || n <= 0) {
+      return 'Number of sets must be greater than 0.';
+    }
+    if (n > 100) {
+      return 'Maximum 100 sets can be generated at a time.';
+    }
+    return '';
+  }, []);
 
-    if (isNaN(s) || isNaN(e)) {
-      setError('Please enter valid numbers for both Start and End.');
+  // Handle generation
+  const handleGenerate = useCallback(() => {
+    const errorMsg = validateInput(middleSetCount);
+    if (errorMsg) {
+      setInputError(errorMsg);
+      setMiddleVerificationStatus('idle');
+      setMiddleVerificationErrors([errorMsg]);
       return;
     }
-    if (s > e) {
-      setError('Start must be less than or equal to End.');
-      return;
-    }
-    if (e - s > 1_000_000) {
-      setError('Range too large. Maximum range is 1,000,000.');
-      return;
-    }
 
-    const result = computeMiddleNumbers(s, e, count);
-    setMiddleNumbers(result);
-  }, [middleRangeStart, middleRangeEnd, count, setMiddleNumbers]);
+    setInputError('');
+    setMiddleIsGenerating(true);
 
+    try {
+      const count = parseInt(middleSetCount, 10);
+      const res = generateMiddleSets(count, { excludedCodeSet });
+
+      if (res.error) {
+        setMiddleVerificationStatus('failed');
+        setMiddleVerificationErrors([res.error]);
+        setMiddleGeneratedSets([]);
+        setMiddleIsGenerating(false);
+        return;
+      }
+
+      // Verify the generated sets
+      const verification = verifyMiddleSets(res.sets, count);
+
+      if (verification.isValid) {
+        setMiddleGeneratedSets(res.sets);
+        setMiddleVerificationStatus('verified');
+        setMiddleVerificationErrors([]);
+      } else {
+        setMiddleGeneratedSets(res.sets);
+        setMiddleVerificationStatus('failed');
+        setMiddleVerificationErrors(verification.errors);
+      }
+    } catch (err) {
+      setMiddleVerificationStatus('failed');
+      setMiddleVerificationErrors([err.message || 'An unexpected error occurred during generation.']);
+    } finally {
+      setMiddleIsGenerating(false);
+    }
+  }, [
+    middleSetCount,
+    excludedCodeSet,
+    validateInput,
+    setMiddleGeneratedSets,
+    setMiddleVerificationStatus,
+    setMiddleVerificationErrors,
+    setMiddleIsGenerating,
+  ]);
+
+  // Handle key press (Enter generates)
   const handleKeyDown = (e) => {
-    if (e.key === 'Enter') handleCompute();
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleGenerate();
+    }
   };
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(middleNumbers.join(', '));
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
+  // Full clipboard copy (exact operational format)
+  const handleCopyAll = useCallback(() => {
+    if (!middleGeneratedSets || middleGeneratedSets.length === 0) return;
 
-  const midpoint = useMemo(() => {
-    const s = parseInt(middleRangeStart, 10);
-    const e = parseInt(middleRangeEnd, 10);
-    if (!isNaN(s) && !isNaN(e) && s <= e) return Math.floor((s + e) / 2);
-    return null;
-  }, [middleRangeStart, middleRangeEnd]);
+    const formatted = formatSetsForClipboard(
+      middleGeneratedSets,
+      middleVerificationStatus === 'verified'
+    );
 
-  const rangeSize = useMemo(() => {
-    const s = parseInt(middleRangeStart, 10);
-    const e = parseInt(middleRangeEnd, 10);
-    if (!isNaN(s) && !isNaN(e) && s <= e) return e - s + 1;
-    return null;
-  }, [middleRangeStart, middleRangeEnd]);
+    navigator.clipboard.writeText(formatted).then(
+      () => {
+        setCopyMessage(`Copied ${middleGeneratedSets.length} sets to clipboard!`);
+        setCopySuccess(true);
+      },
+      () => {
+        setCopyMessage('Failed to copy to clipboard.');
+        setCopySuccess(true);
+      }
+    );
+  }, [middleGeneratedSets, middleVerificationStatus]);
 
-  const hasNumbers = middleNumbers.length > 0;
-  const canCompute = middleRangeStart && middleRangeEnd;
+  // Copy single set
+  const handleCopySingleSet = useCallback((set) => {
+    const lines = [`${set.setNumber}\n`];
+    set.rows.forEach((row) => {
+      lines.push(`${String(row.prize).padEnd(7, ' ')}${row.start} - ${row.end}`);
+    });
+    const text = lines.join('\n');
+
+    navigator.clipboard.writeText(text).then(
+      () => {
+        setCopyMessage(`Copied Set ${set.setNumber} to clipboard!`);
+        setCopySuccess(true);
+      },
+      () => {
+        setCopyMessage('Failed to copy.');
+        setCopySuccess(true);
+      }
+    );
+  }, []);
+
+  const hasResults = middleGeneratedSets.length > 0;
+  const isVerified = middleVerificationStatus === 'verified';
+
+  // Memoized formatted text for raw preview
+  const formattedRawText = useMemo(() => {
+    if (!hasResults) return '';
+    return formatSetsForClipboard(middleGeneratedSets, isVerified);
+  }, [middleGeneratedSets, isVerified, hasResults]);
 
   return (
     <Container
-      maxWidth="lg"
+      maxWidth="xl"
       className="page-content"
       sx={{ py: { xs: 3, sm: 4, md: 5 } }}
     >
@@ -94,298 +208,478 @@ export default function MiddleNumbers() {
         iconBg={ACCENT_BG}
         iconColor={ACCENT}
         title="Middle Numbers"
-        subtitle="Compute the center numbers of any lottery range"
+        subtitle="Generate and verify operational 8-row lottery prize sets"
         breadcrumb="Middle Numbers"
       />
 
-      {/* ── Two-column layout ──────────────────────────────────────────── */}
-      <Box
+      {/* ── Control Bar ──────────────────────────────────────────────── */}
+      <Paper
         sx={{
-          display: 'grid',
-          gridTemplateColumns: { xs: '1fr', md: '320px 1fr' },
-          gap: { xs: 2.5, sm: 3 },
-          alignItems: 'start',
+          p: { xs: 2.5, sm: 3 },
+          mb: 3,
+          background: 'rgba(255,255,255,0.025)',
+          border: `1px solid ${ACCENT_BORDER}`,
+          borderRadius: '16px',
         }}
       >
-        {/* ── Left: Configuration ─────────────────────────────────────── */}
-        <Paper
+        <Box
           sx={{
-            p: { xs: 2.5, sm: 3 },
-            background: 'rgba(255,255,255,0.025)',
-            border: `1px solid ${ACCENT_BORDER}`,
+            display: 'flex',
+            flexDirection: { xs: 'column', md: 'row' },
+            alignItems: { xs: 'stretch', md: 'center' },
+            justifyContent: 'space-between',
+            gap: 2.5,
           }}
         >
-          <Typography variant="overline" sx={{ color: ACCENT, mb: 2.5, display: 'block' }}>
-            Range Configuration
-          </Typography>
-
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            {/* Range inputs */}
+          {/* Input and Quick Presets */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
             <TextField
-              label="Range Start"
+              label="Sets to Generate"
               type="number"
-              fullWidth
-              value={middleRangeStart}
-              onChange={(e) => { setMiddleRangeStart(e.target.value); setError(''); }}
-              onKeyDown={handleKeyDown}
-              inputProps={{ min: 0, 'aria-label': 'Range start number' }}
-              sx={{
-                '& .MuiOutlinedInput-root.Mui-focused fieldset': { borderColor: ACCENT },
-                '& .MuiInputLabel-root.Mui-focused': { color: ACCENT },
+              size="medium"
+              value={middleSetCount}
+              onChange={(e) => {
+                setMiddleSetCount(e.target.value);
+                setInputError('');
               }}
-            />
-            <TextField
-              label="Range End"
-              type="number"
-              fullWidth
-              value={middleRangeEnd}
-              onChange={(e) => { setMiddleRangeEnd(e.target.value); setError(''); }}
               onKeyDown={handleKeyDown}
-              inputProps={{ min: 0, 'aria-label': 'Range end number' }}
+              error={Boolean(inputError)}
+              helperText={inputError}
+              inputProps={{ min: 1, max: 100, step: 1, 'aria-label': 'Number of sets to generate' }}
               sx={{
+                width: { xs: '100%', sm: 180 },
                 '& .MuiOutlinedInput-root.Mui-focused fieldset': { borderColor: ACCENT },
                 '& .MuiInputLabel-root.Mui-focused': { color: ACCENT },
               }}
             />
 
-            {/* Range stats preview */}
-            {midpoint !== null && (
-              <Box
-                sx={{
-                  display: 'grid',
-                  gridTemplateColumns: '1fr 1fr',
-                  gap: 1,
-                }}
-              >
-                <Box
-                  sx={{
-                    p: 1.5,
-                    borderRadius: '10px',
-                    background: ACCENT_BG,
-                    border: `1px solid ${ACCENT_BORDER}`,
-                    textAlign: 'center',
+            {/* Presets */}
+            <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+              <Typography variant="caption" color="text.secondary" sx={{ mr: 0.5 }}>
+                Quick:
+              </Typography>
+              {[1, 2, 5, 10, 20].map((preset) => (
+                <Chip
+                  key={preset}
+                  label={`${preset} Set${preset > 1 ? 's' : ''}`}
+                  size="small"
+                  clickable
+                  onClick={() => {
+                    setMiddleSetCount(String(preset));
+                    setInputError('');
                   }}
-                >
-                  <Typography variant="caption" color="text.secondary" display="block">
-                    Midpoint
-                  </Typography>
-                  <Typography variant="h6" fontWeight={800} sx={{ color: ACCENT, fontSize: '1rem' }}>
-                    {midpoint.toLocaleString()}
-                  </Typography>
-                </Box>
-                <Box
+                  variant={middleSetCount === String(preset) ? 'filled' : 'outlined'}
                   sx={{
-                    p: 1.5,
-                    borderRadius: '10px',
-                    background: 'rgba(255,255,255,0.03)',
-                    border: `1px solid ${tokens.border}`,
-                    textAlign: 'center',
+                    borderColor: ACCENT_BORDER,
+                    background: middleSetCount === String(preset) ? ACCENT_BG : 'transparent',
+                    color: middleSetCount === String(preset) ? '#fff' : tokens.textSecondary,
+                    fontWeight: 600,
+                    '&:hover': { background: ACCENT_BG, borderColor: ACCENT },
                   }}
-                >
-                  <Typography variant="caption" color="text.secondary" display="block">
-                    Range Size
-                  </Typography>
-                  <Typography variant="h6" fontWeight={800} sx={{ color: tokens.textSecondary, fontSize: '1rem' }}>
-                    {rangeSize.toLocaleString()}
-                  </Typography>
-                </Box>
-              </Box>
-            )}
+                />
+              ))}
+            </Stack>
+          </Box>
 
-            {/* Count slider */}
-            <Box>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                <Typography variant="caption" color="text.secondary" id="count-label">
-                  Count of middle numbers
-                </Typography>
-                <Box
-                  sx={{
-                    px: 1,
-                    py: 0.2,
-                    borderRadius: '20px',
-                    background: ACCENT_BG,
-                    border: `1px solid ${ACCENT_BORDER}`,
-                  }}
-                >
-                  <Typography variant="caption" sx={{ color: ACCENT, fontWeight: 700 }}>
-                    {count}
-                  </Typography>
-                </Box>
-              </Box>
-              <Slider
-                value={count}
-                onChange={(_, v) => setCount(v)}
-                min={2}
-                max={50}
-                step={2}
-                aria-labelledby="count-label"
-                sx={{ color: ACCENT }}
-              />
-            </Box>
-
-            {/* Error */}
-            {error && (
-              <Alert severity="error" onClose={() => setError('')}>
-                {error}
-              </Alert>
-            )}
-
-            {/* Compute button */}
+          {/* Action Buttons */}
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ alignItems: 'center' }}>
             <Button
               variant="contained"
               size="large"
-              fullWidth
-              startIcon={<AutoFixHighIcon />}
-              onClick={handleCompute}
-              disabled={!canCompute}
+              startIcon={
+                middleIsGenerating ? (
+                  <CircularProgress size={16} color="inherit" />
+                ) : (
+                  <AutoAwesomeIcon />
+                )
+              }
+              onClick={handleGenerate}
+              disabled={middleIsGenerating}
               sx={{
+                minWidth: 160,
                 background: `linear-gradient(135deg, ${ACCENT}, #7D3C98)`,
                 color: '#fff',
                 fontWeight: 700,
                 '&:hover': {
                   background: `linear-gradient(135deg, #7D3C98, ${ACCENT})`,
-                  boxShadow: `0 4px 18px rgba(142,68,173,0.38)`,
-                  transform: 'translateY(-1px)',
-                },
-                '&:active': { transform: 'translateY(0)' },
-                '&.Mui-disabled': {
-                  background: 'rgba(255,255,255,0.06)',
-                  color: 'rgba(255,255,255,0.28)',
+                  boxShadow: '0 4px 18px rgba(142,68,173,0.38)',
                 },
               }}
             >
-              Compute
+              {middleIsGenerating ? 'Generating…' : 'Generate Sets'}
             </Button>
-          </Box>
-        </Paper>
 
-        {/* ── Right: Results ───────────────────────────────────────────── */}
-        <Paper
-          sx={{
-            p: { xs: 2.5, sm: 3 },
-            background: 'rgba(255,255,255,0.025)',
-            border: `1px solid ${ACCENT_BORDER}`,
-            minHeight: { xs: 240, md: 380 },
-            display: 'flex',
-            flexDirection: 'column',
-          }}
-        >
-          {/* Panel header */}
-          <Box
-            sx={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              mb: hasNumbers ? 2 : 0,
-            }}
-          >
-            <Typography variant="overline" sx={{ color: ACCENT }}>
-              Result
-              {hasNumbers && (
-                <Box
-                  component="span"
-                  sx={{
-                    ml: 1,
-                    px: 1,
-                    py: 0.2,
-                    borderRadius: '20px',
-                    background: ACCENT_BG,
-                    fontSize: '0.65rem',
-                    border: `1px solid ${ACCENT_BORDER}`,
-                  }}
-                >
-                  {middleNumbers.length} numbers
-                </Box>
-              )}
-            </Typography>
+            <Button
+              variant="outlined"
+              size="large"
+              startIcon={<ContentCopyIcon />}
+              onClick={handleCopyAll}
+              disabled={!hasResults}
+              sx={{
+                minWidth: 150,
+                borderColor: tokens.goldBorder,
+                color: tokens.gold,
+                fontWeight: 700,
+                '&:hover': {
+                  borderColor: tokens.gold,
+                  background: `${tokens.gold}18`,
+                },
+              }}
+            >
+              Copy Number
+            </Button>
 
-            {hasNumbers && (
-              <Tooltip title={copied ? 'Copied!' : 'Copy all as comma-separated'}>
+            {hasResults && (
+              <Tooltip title="Reset Middle Numbers">
                 <IconButton
-                  size="small"
-                  onClick={handleCopy}
-                  aria-label={copied ? 'Copied' : 'Copy results'}
+                  onClick={resetMiddleNumbers}
+                  size="large"
                   sx={{
-                    color: copied ? tokens.success : 'text.secondary',
-                    '&:hover': { color: ACCENT, background: ACCENT_BG },
+                    color: 'text.secondary',
+                    '&:hover': { color: tokens.crimson, background: 'rgba(231,76,60,0.1)' },
                   }}
                 >
-                  {copied ? <CheckIcon fontSize="small" /> : <ContentCopyIcon fontSize="small" />}
+                  <RestartAltIcon />
                 </IconButton>
               </Tooltip>
             )}
-          </Box>
+          </Stack>
+        </Box>
+      </Paper>
 
-          {/* Empty state */}
-          {!hasNumbers ? (
-            <Box
+      {/* ── Status Banners ───────────────────────────────────────────── */}
+      {isVerified && (
+        <Alert
+          severity="success"
+          icon={<VerifiedIcon fontSize="inherit" />}
+          sx={{
+            mb: 3,
+            background: 'rgba(46,204,113,0.12)',
+            border: '1px solid rgba(46,204,113,0.3)',
+            borderRadius: '12px',
+          }}
+        >
+          <strong>NEW {middleGeneratedSets.length} SETS (Verified)</strong> — Successfully generated{' '}
+          <strong>{middleGeneratedSets.length * 8}</strong> total prize blocks across{' '}
+          <strong>{middleGeneratedSets.length}</strong> independent sets. All 3-digit middle numbers are unique with zero overlapping ranges.
+        </Alert>
+      )}
+
+      {middleVerificationStatus === 'failed' && (
+        <Alert
+          severity="error"
+          sx={{
+            mb: 3,
+            background: 'rgba(231,76,60,0.12)',
+            border: '1px solid rgba(231,76,60,0.3)',
+            borderRadius: '12px',
+          }}
+        >
+          <Typography variant="subtitle2" fontWeight={800} gutterBottom>
+            Set Generation / Verification Failed
+          </Typography>
+          <ul style={{ margin: 0, paddingLeft: 20 }}>
+            {middleVerificationErrors.map((err, i) => (
+              <li key={i}>{err}</li>
+            ))}
+          </ul>
+        </Alert>
+      )}
+
+      {/* ── Results Container ────────────────────────────────────────── */}
+      {!hasResults ? (
+        <Paper
+          sx={{
+            p: { xs: 4, sm: 6 },
+            textAlign: 'center',
+            background: 'rgba(255,255,255,0.02)',
+            border: `1px solid ${tokens.border}`,
+            borderRadius: '16px',
+          }}
+        >
+          <FormatListNumberedIcon sx={{ fontSize: 56, color: 'text.disabled', mb: 2 }} />
+          <Typography variant="h6" color="text.secondary" fontWeight={700} gutterBottom>
+            No Middle Number Sets Generated Yet
+          </Typography>
+          <Typography variant="body2" color="text.disabled" sx={{ maxWidth: 460, mx: 'auto', mb: 3 }}>
+            Choose how many sets you need (e.g. 5) and click <strong>Generate Sets</strong>. Each set contains 8 verified prize denomination ranges (200, 100, 50, 25, 10, 10, 5, 5).
+          </Typography>
+          <Button
+            variant="contained"
+            startIcon={<AutoAwesomeIcon />}
+            onClick={handleGenerate}
+            sx={{
+              background: `linear-gradient(135deg, ${ACCENT}, #7D3C98)`,
+              color: '#fff',
+              fontWeight: 700,
+            }}
+          >
+            Generate 5 Sets Now
+          </Button>
+        </Paper>
+      ) : (
+        <Box>
+          {/* View Mode Toggle */}
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+            <Tabs
+              value={activeTab}
+              onChange={(_, val) => setActiveTab(val)}
               sx={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                flexGrow: 1,
-                py: 6,
-                opacity: 0.38,
-                gap: 1.5,
+                '& .MuiTabs-indicator': { backgroundColor: ACCENT },
+                '& .MuiTab-root': { color: 'text.secondary', fontWeight: 600 },
+                '& .MuiTab-root.Mui-selected': { color: ACCENT },
               }}
             >
-              <FormatListNumberedIcon sx={{ fontSize: 52, color: 'text.secondary' }} />
-              <Typography variant="body2" color="text.secondary" textAlign="center">
-                Enter a range and click <strong>Compute</strong>
-              </Typography>
+              <Tab icon={<DashboardCustomizeIcon fontSize="small" />} iconPosition="start" label="Visual Sets" />
+              <Tab icon={<TerminalIcon fontSize="small" />} iconPosition="start" label="Raw Dealer Text" />
+            </Tabs>
+
+            <Typography variant="caption" color="text.secondary">
+              Total: <strong>{middleGeneratedSets.length} Sets</strong> ({middleGeneratedSets.length * 8} ranges)
+            </Typography>
+          </Box>
+
+          {/* TAB 0: Visual Cards */}
+          {activeTab === 0 && (
+            <Box
+              sx={{
+                display: 'grid',
+                gridTemplateColumns: { xs: '1fr', md: 'repeat(auto-fit, minmax(360px, 1fr))' },
+                gap: 2.5,
+              }}
+            >
+              {middleGeneratedSets.map((set) => (
+                <Paper
+                  key={set.setNumber}
+                  sx={{
+                    p: 2.5,
+                    background: 'rgba(255,255,255,0.025)',
+                    border: `1px solid ${ACCENT_BORDER}`,
+                    borderRadius: '16px',
+                    transition: 'border-color 0.2s ease, transform 0.2s ease',
+                    '&:hover': {
+                      borderColor: ACCENT,
+                      transform: 'translateY(-2px)',
+                    },
+                  }}
+                >
+                  {/* Set Header */}
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      mb: 2,
+                      pb: 1.5,
+                      borderBottom: `1px solid ${tokens.border}`,
+                    }}
+                  >
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Box
+                        sx={{
+                          width: 32,
+                          height: 32,
+                          borderRadius: '8px',
+                          background: ACCENT_BG,
+                          border: `1px solid ${ACCENT_BORDER}`,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: ACCENT,
+                          fontWeight: 800,
+                          fontSize: '0.95rem',
+                        }}
+                      >
+                        {set.setNumber}
+                      </Box>
+                      <Typography variant="subtitle1" fontWeight={800} sx={{ color: '#fff' }}>
+                        SET {set.setNumber}
+                      </Typography>
+                      {isVerified && (
+                        <Chip
+                          label="Verified"
+                          size="small"
+                          sx={{
+                            height: 20,
+                            fontSize: '0.65rem',
+                            fontWeight: 700,
+                            background: 'rgba(46,204,113,0.15)',
+                            color: tokens.success,
+                            border: '1px solid rgba(46,204,113,0.3)',
+                          }}
+                        />
+                      )}
+                    </Box>
+
+                    <Tooltip title={`Copy Set ${set.setNumber}`}>
+                      <IconButton
+                        size="small"
+                        onClick={() => handleCopySingleSet(set)}
+                        sx={{
+                          color: 'text.secondary',
+                          '&:hover': { color: ACCENT, background: ACCENT_BG },
+                        }}
+                      >
+                        <ContentCopyIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  </Box>
+
+                  {/* Set Rows */}
+                  <Stack spacing={1}>
+                    {set.rows.map((row, rIdx) => {
+                      const badgeColor = PRIZE_COLORS[row.prize] || ACCENT;
+                      return (
+                        <Box
+                          key={`${row.id}-${rIdx}`}
+                          sx={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            px: 1.5,
+                            py: 0.8,
+                            borderRadius: '8px',
+                            background: 'rgba(255,255,255,0.02)',
+                            border: '1px solid rgba(255,255,255,0.04)',
+                            '&:hover': {
+                              background: 'rgba(255,255,255,0.04)',
+                            },
+                          }}
+                        >
+                          {/* Prize Denomination */}
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                            <Box
+                              sx={{
+                                width: 44,
+                                height: 26,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                borderRadius: '6px',
+                                background: `${badgeColor}18`,
+                                border: `1px solid ${badgeColor}55`,
+                                color: badgeColor,
+                                fontWeight: 800,
+                                fontSize: '0.82rem',
+                                lineHeight: 1,
+                              }}
+                            >
+                              {row.prize}
+                            </Box>
+
+                            {/* Middle Prefix tag */}
+                            <Tooltip title={`Middle Prefix: ${row.prefix}`}>
+                              <Typography
+                                variant="caption"
+                                sx={{
+                                  fontFamily: "'JetBrains Mono', monospace",
+                                  color: 'text.disabled',
+                                  fontSize: '0.75rem',
+                                }}
+                              >
+                                #{row.prefix}
+                              </Typography>
+                            </Tooltip>
+                          </Box>
+
+                          {/* Range Box */}
+                          <Box
+                            sx={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              height: 28,
+                              px: 1.5,
+                              borderRadius: '6px',
+                              background: 'rgba(0,0,0,0.3)',
+                              border: `1px solid ${tokens.border}`,
+                              fontFamily: "'JetBrains Mono', monospace",
+                              fontWeight: 700,
+                              fontSize: '0.88rem',
+                              color: '#fff',
+                              letterSpacing: 0,
+                              fontVariantNumeric: 'tabular-nums',
+                            }}
+                          >
+                            {row.start} - {row.end}
+                          </Box>
+                        </Box>
+                      );
+                    })}
+                  </Stack>
+                </Paper>
+              ))}
             </Box>
-          ) : (
-            <>
-              {/* Summary */}
-              <Alert severity="info" sx={{ mb: 2.5, borderColor: ACCENT_BORDER }}>
-                Middle <strong>{middleNumbers.length}</strong> numbers from{' '}
-                <strong>{parseInt(middleRangeStart).toLocaleString()}</strong> to{' '}
-                <strong>{parseInt(middleRangeEnd).toLocaleString()}</strong>
-              </Alert>
-
-              <Divider sx={{ mb: 2 }} />
-
-              {/* Number chips */}
-              <Box
-                sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, alignContent: 'flex-start' }}
-              >
-                {middleNumbers.map((num, i) => {
-                  const isMid =
-                    i === Math.floor(middleNumbers.length / 2) - 1 ||
-                    i === Math.floor(middleNumbers.length / 2);
-                  return (
-                    <Chip
-                      key={i}
-                      label={num.toLocaleString()}
-                      sx={{
-                        fontFamily: 'monospace',
-                        fontWeight: isMid ? 800 : 600,
-                        fontSize: isMid ? '0.9rem' : '0.82rem',
-                        height: isMid ? 34 : 28,
-                        background: isMid ? 'rgba(142,68,173,0.30)' : ACCENT_BG,
-                        color: isMid ? '#D7BDE2' : '#C39BD3',
-                        border: isMid
-                          ? '1px solid rgba(142,68,173,0.55)'
-                          : `1px solid ${ACCENT_BORDER}`,
-                        borderRadius: '8px',
-                        boxShadow: isMid
-                          ? `0 0 10px rgba(142,68,173,0.35)`
-                          : 'none',
-                        transition: 'all 0.15s ease',
-                        '&:hover': {
-                          background: 'rgba(142,68,173,0.25)',
-                          transform: 'scale(1.04)',
-                        },
-                      }}
-                    />
-                  );
-                })}
-              </Box>
-            </>
           )}
-        </Paper>
-      </Box>
+
+          {/* TAB 1: Raw Operational Dealer Text */}
+          {activeTab === 1 && (
+            <Paper
+              sx={{
+                p: 3,
+                background: '#0a0a14',
+                border: `1px solid ${ACCENT_BORDER}`,
+                borderRadius: '16px',
+                position: 'relative',
+              }}
+            >
+              <Box
+                sx={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  mb: 2,
+                }}
+              >
+                <Typography variant="overline" color={ACCENT}>
+                  Raw Clipboard Text Format
+                </Typography>
+                <Button
+                  variant="outlined"
+                  size="small"
+                  startIcon={<ContentCopyIcon />}
+                  onClick={handleCopyAll}
+                  sx={{
+                    borderColor: ACCENT_BORDER,
+                    color: ACCENT,
+                    '&:hover': { borderColor: ACCENT, background: ACCENT_BG },
+                  }}
+                >
+                  Copy All Text
+                </Button>
+              </Box>
+
+              <Box
+                component="pre"
+                sx={{
+                  m: 0,
+                  p: 2.5,
+                  borderRadius: '8px',
+                  background: 'rgba(0,0,0,0.5)',
+                  border: `1px solid ${tokens.border}`,
+                  color: '#e0e0e0',
+                  fontFamily: "'JetBrains Mono', monospace",
+                  fontSize: '0.9rem',
+                  lineHeight: 1.7,
+                  overflowX: 'auto',
+                  whiteSpace: 'pre-wrap',
+                }}
+              >
+                {formattedRawText}
+              </Box>
+            </Paper>
+          )}
+        </Box>
+      )}
+
+      {/* ── Copy Notification Toast ──────────────────────────────────── */}
+      <Snackbar
+        open={copySuccess}
+        autoHideDuration={2500}
+        onClose={() => setCopySuccess(false)}
+        message={copyMessage}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      />
     </Container>
   );
 }

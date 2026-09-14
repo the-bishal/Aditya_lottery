@@ -75,7 +75,7 @@ const CARDS = [
   {
     icon: <FormatListNumberedIcon fontSize="inherit" />,
     title: 'Middle Numbers',
-    description: 'Instantly compute the center numbers for any lottery range with a configurable count.',
+    description: 'Generate and verify complete 8-row lottery prize sets with non-overlapping ranges and dealer copy.',
     to: '/middle-numbers',
     accentColor: tokens.purple,
     delay: 120,

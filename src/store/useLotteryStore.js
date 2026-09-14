@@ -6,13 +6,17 @@ import { ALL_RANKS } from '../utils/placementEngine';
  * useLotteryStore — Central Zustand store for the entire admin panel.
  *
  * Sections:
- *  - exclusion  : 2-digit code-based exclusion set (Step 1)
- *  - ocr        : OCR scanning progress state
- *  - ocrEntries : Editable OCR entry list (Step 2 source of truth)
- *  - rankArrays : Placed winners per rank (Step 2 destination)
- *  - result     : base64 / blob URL of the generated result image (Step 3)
- *  - hardcopy   : numbers extracted from hardcopy image
- *  - middle     : computed middle-numbers from a range
+ *  - exclusion        : 2-digit code-based exclusion set (Step 1)
+ *  - ocr              : OCR scanning progress state
+ *  - ocrEntries       : Editable OCR entry list (Step 2 source of truth)
+ *  - rankArrays       : Placed winners per rank (Step 2 destination)
+ *  - generationStatus : 'idle' | 'generating' | 'success' | 'error'
+ *  - saveStatus       : 'idle' | 'saving' | 'saved' | 'error'
+ *  - saveError        : string description if server save fails
+ *  - autoFillLogs     : array of operational console log messages
+ *  - result           : base64 / blob URL of the generated result image (Step 3)
+ *  - hardcopy         : numbers extracted from hardcopy image
+ *  - middle           : computed middle-numbers from a range
  *
  * Exclusion logic:
  *   The user pastes previous prize blocks such as "25  10100 - 10199".
@@ -121,6 +125,22 @@ const useLotteryStore = create((set, _get) => ({
 
   resetRankArrays: () => set({ rankArrays: emptyRankArrays() }),
 
+  // ── Workflow Operation Statuses (Decoupled Generation vs Save) ────────────────
+  generationStatus: 'idle', // 'idle' | 'generating' | 'success' | 'error'
+  placementStatus:  'idle', // 'idle' | 'success'
+  saveStatus:        'idle', // 'idle' | 'saving' | 'saved' | 'error'
+  saveError:         '',
+  autoFillLogs:      [],     // Console log lines: ['Auto-generated 1st Prize', 'Fill done! ...', 'Placed 141 winners']
+
+  setGenerationStatus: (s) => set({ generationStatus: s }),
+  setPlacementStatus:  (s) => set({ placementStatus: s }),
+  setSaveStatus:        (s) => set({ saveStatus: s }),
+  setSaveError:         (e) => set({ saveError: e }),
+  setAutoFillLogs:      (logs) => set({ autoFillLogs: logs }),
+  appendAutoFillLog:    (line) =>
+    set((state) => ({ autoFillLogs: [...state.autoFillLogs, line] })),
+  clearAutoFillLogs:    () => set({ autoFillLogs: [] }),
+
   // ── Step 2: Uploaded image URLs (multi-image preview) ────────────────────────
   uploadedImageURLs: [],
 
@@ -133,10 +153,12 @@ const useLotteryStore = create((set, _get) => ({
   resultImageURL: null,
   resultTitle:    'Lottery Result',
   resultDate:     new Date().toISOString().split('T')[0], // YYYY-MM-DD
+  drawNumber:     '1',
 
   setResultImageURL: (url)   => set({ resultImageURL: url }),
   setResultTitle:    (title) => set({ resultTitle: title }),
   setResultDate:     (date)  => set({ resultDate: date }),
+  setDrawNumber:     (num)   => set({ drawNumber: num }),
 
   // ── Hardcopy Module ───────────────────────────────────────────────────────────
   hardcopyNumbers:     [],
@@ -150,10 +172,29 @@ const useLotteryStore = create((set, _get) => ({
   setHardcopyOcrStatus:   (s)    => set({ hardcopyOcrStatus: s }),
 
   // ── Middle Numbers Module ─────────────────────────────────────────────────────
+  middleSetCount:           '5',
+  middleGeneratedSets:      [],
+  middleVerificationStatus: 'idle', // 'idle' | 'verified' | 'failed'
+  middleVerificationErrors: [],
+  middleIsGenerating:       false,
+
+  setMiddleSetCount:           (v)      => set({ middleSetCount: v }),
+  setMiddleGeneratedSets:      (s)      => set({ middleGeneratedSets: s }),
+  setMiddleVerificationStatus: (status) => set({ middleVerificationStatus: status }),
+  setMiddleVerificationErrors: (errs)   => set({ middleVerificationErrors: errs }),
+  setMiddleIsGenerating:       (g)      => set({ middleIsGenerating: g }),
+  resetMiddleNumbers: () =>
+    set({
+      middleGeneratedSets:      [],
+      middleVerificationStatus: 'idle',
+      middleVerificationErrors: [],
+      middleIsGenerating:       false,
+    }),
+
+  // Backward compatibility legacy fields
   middleRangeStart: '',
   middleRangeEnd:   '',
   middleNumbers:    [],
-
   setMiddleRangeStart: (v)    => set({ middleRangeStart: v }),
   setMiddleRangeEnd:   (v)    => set({ middleRangeEnd: v }),
   setMiddleNumbers:    (list) => set({ middleNumbers: list }),
@@ -161,18 +202,27 @@ const useLotteryStore = create((set, _get) => ({
   // ── Global Reset ──────────────────────────────────────────────────────────────
   resetAll: () =>
     set({
-      excludedRangeText:   '',
-      excludedCodeSet:     new Set(),
-      ocrEntries:          [],
-      rankArrays:          emptyRankArrays(),
-      uploadedImageURLs:   [],
-      ocrProgress:         0,
-      ocrStatus:           'idle',
-      resultImageURL:      null,
-      hardcopyNumbers:     [],
-      hardcopyImageURL:    null,
-      hardcopyOcrProgress: 0,
-      hardcopyOcrStatus:   'idle',
+      excludedRangeText:        '',
+      excludedCodeSet:          new Set(),
+      ocrEntries:               [],
+      rankArrays:               emptyRankArrays(),
+      uploadedImageURLs:        [],
+      ocrProgress:              0,
+      ocrStatus:                'idle',
+      generationStatus:         'idle',
+      placementStatus:          'idle',
+      saveStatus:               'idle',
+      saveError:                '',
+      autoFillLogs:             [],
+      resultImageURL:           null,
+      hardcopyNumbers:          [],
+      hardcopyImageURL:         null,
+      hardcopyOcrProgress:      0,
+      hardcopyOcrStatus:        'idle',
+      middleGeneratedSets:      [],
+      middleVerificationStatus: 'idle',
+      middleVerificationErrors: [],
+      middleIsGenerating:       false,
     }),
 }));
 
