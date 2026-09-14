@@ -78,6 +78,7 @@ export function computeMiddleNumbers(start, end, count = 10) {
 /**
  * Clean OCR raw text into an array of number strings.
  * OCR often includes noise like 'O' instead of '0', spaces, etc.
+ * Kept for backward compatibility with other modules.
  *
  * @param {string} rawText
  * @returns {string[]}
@@ -97,4 +98,100 @@ export function cleanOCRText(rawText) {
 
   // De-duplicate
   return [...new Set(tokens)];
+}
+
+// ── OCR Winner Parser ─────────────────────────────────────────────────────────
+
+/**
+ * OCR character correction map — common Tesseract misreads.
+ */
+const OCR_CHAR_MAP = {
+  O: '0', o: '0',
+  l: '1', I: '1',
+  S: '5',
+  B: '8',
+  G: '6',
+  Z: '2',
+};
+
+/**
+ * Apply OCR character corrections to a string.
+ * @param {string} s
+ * @returns {string}
+ */
+function applyOCRCorrections(s) {
+  return s
+    .split('')
+    .map((c) => OCR_CHAR_MAP[c] ?? c)
+    .join('');
+}
+
+/**
+ * Suggest a prize rank based on digit count alone.
+ * This is only a suggestion — the user must confirm or override.
+ *
+ * 5 digits → 2ND (most likely 2nd prize)
+ * 4 digits → 3RD (could be 3rd/4th/5th — default to 3rd)
+ *
+ * @param {string} numberStr - the cleaned digit-only string
+ * @returns {string} rank key e.g. '2ND', '3RD', or ''
+ */
+export function suggestRankByDigitCount(numberStr) {
+  const digits = numberStr.replace(/\D/g, '');
+  if (digits.length === 5) return '2ND';
+  if (digits.length === 4) return '3RD';
+  return '';
+}
+
+/**
+ * Parse OCR raw text for lottery winning numbers.
+ *
+ * Rules:
+ *  - Accept ONLY 4-digit or 5-digit numeric tokens (these are the only valid lottery number lengths)
+ *  - Preserve leading zeros (return strings, not integers)
+ *  - Apply standard OCR character corrections before extraction
+ *  - Do NOT globally deduplicate — return all occurrences so the user can review
+ *  - Suggest rank based on digit count (user can always override)
+ *  - Assign a confidence score based on how clean the source token was
+ *
+ * @param {string} rawText - raw string returned by Tesseract.js
+ * @returns {Array<{
+ *   number: string,
+ *   suggestedRank: string,
+ *   confidence: number,
+ *   raw: string
+ * }>}
+ */
+export function parseOCRForWinners(rawText) {
+  if (!rawText || typeof rawText !== 'string') return [];
+
+  const results = [];
+
+  // Split on whitespace/punctuation that is definitely not part of a number.
+  // Keep the raw token so we can record what OCR actually saw.
+  const rawTokens = rawText.split(/[\s\n\r,;:|]+/).filter(Boolean);
+
+  for (const rawToken of rawTokens) {
+    // Apply character corrections
+    const corrected = applyOCRCorrections(rawToken);
+
+    // Strip any remaining non-digit characters (dashes, periods, etc.)
+    const digitsOnly = corrected.replace(/[^0-9]/g, '');
+
+    // Only accept exactly 4 or 5 digit sequences
+    if (digitsOnly.length !== 4 && digitsOnly.length !== 5) continue;
+
+    // Confidence: full if token was already all-digits; reduced if corrections were applied
+    const wasAlreadyDigits = /^\d+$/.test(rawToken) && rawToken.length === digitsOnly.length;
+    const confidence = wasAlreadyDigits ? 0.95 : 0.70;
+
+    results.push({
+      number:        digitsOnly,           // preserved leading zeros
+      suggestedRank: suggestRankByDigitCount(digitsOnly),
+      confidence,
+      raw:           rawToken,             // original OCR token for debugging
+    });
+  }
+
+  return results;
 }
