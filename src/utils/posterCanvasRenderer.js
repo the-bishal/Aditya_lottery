@@ -186,13 +186,19 @@ function roundRectPath(ctx, x, y, w, h, r) {
   }
 }
 
-/** Centred text with optional max-width shrink */
-function drawCentred(ctx, text, cx, cy, font, color, maxWidth) {
+/** Centred text with optional max-width shrink and optional stroke */
+function drawCentred(ctx, text, cx, cy, font, color, maxWidth, strokeWidth) {
   ctx.save();
   ctx.font = font;
   ctx.fillStyle = color;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
+  if (strokeWidth) {
+    ctx.lineWidth = strokeWidth;
+    ctx.strokeStyle = color;
+    if (maxWidth) ctx.strokeText(text, cx, cy, maxWidth);
+    else ctx.strokeText(text, cx, cy);
+  }
   if (maxWidth) {
     ctx.fillText(text, cx, cy, maxWidth);
   } else {
@@ -238,7 +244,7 @@ const MORNING = {
   },
 
   // Consolation last-5 digits — thin strip at y=280–292; number after the label
-  consPrize: { cx: 455, cy: 265, font: '1100 22px "JetBrains Mono",monospace', color: '#000000' },
+  consPrize: { cx: 455, cy: 265, font: '900 22px "JetBrains Mono",monospace', color: '#000000', strokeWidth: 0.8 },
 
   // 2nd Prize — white zone y=292–347 → 2 rows of 5 numbers
   second: {
@@ -246,6 +252,7 @@ const MORNING = {
     row1Y: 313, row2Y: 334,
     cols: 5,
     font: '900 19px "JetBrains Mono",monospace', color: '#000000',
+    strokeWidth: 0.8,
   },
 
   // 3rd Prize — blue badge zone y=356–440 → 3 rows of 5 numbers
@@ -254,6 +261,7 @@ const MORNING = {
     row1Y: 376, row2Y: 400, row3Y: 424,
     cols: 5,
     font: '900 18px "JetBrains Mono",monospace', color: '#000000',
+    strokeWidth: 0.7,
   },
 
   // 4th Prize — brown badge zone y=448–530 → 3 rows of 5 numbers
@@ -262,6 +270,7 @@ const MORNING = {
     row1Y: 467, row2Y: 490, row3Y: 513,
     cols: 5,
     font: '900 18px "JetBrains Mono",monospace', color: '#000000',
+    strokeWidth: 0.7,
   },
 
   // 5th Prize grid — white area y=796–975, 10 rows × 10 cols
@@ -269,14 +278,14 @@ const MORNING = {
     tableLeft: 4, tableRight: 749,
     rowStartY: 796, rowHeight: 18,
     rows: 10, cols: 10,
-    font: '700 14px "JetBrains Mono",monospace', color: '#000000',
+    font: '900 14px "JetBrains Mono",monospace', color: '#000000',
+    strokeWidth: 0.6,
   },
 
   // Footer bar — yellow band y=998–1012
   footer: {
-    leftDate:  { cx: 82,  cy: 1003, font: '900 15px "Poppins",Arial,sans-serif', color: '#D80027' },
-    time:      { cx: 377, cy: 1003, font: '900 18px "Poppins",Arial,sans-serif', color: '#D80027' },
-    rightDate: { cx: 666, cy: 1003, font: '900 15px "Poppins",Arial,sans-serif', color: '#D80027' },
+    leftDate:  { cx: 78,  cy: 1003, font: '900 25px "Poppins",Arial,sans-serif', color: '#D80027' },
+    rightDate: { cx: 674, cy: 1003, font: '900 25px "Poppins",Arial,sans-serif', color: '#D80027' },
   },
 };
 
@@ -289,22 +298,23 @@ const EVENING = {
 
   drawDate: {
     cx: 530, cy: 163,
-    font: '900 18px "Poppins", Arial, sans-serif', color: '#FFFFFF',
+    font: '900 24px "Poppins", Arial, sans-serif', color: '#FFFFFF',
   },
 
   firstPrize: {
-    cx: 480, cy: 219,
+    cx: 480, cy: 221,
     font: '900 40px "JetBrains Mono","Courier New",monospace',
     color: '#D80027', maxW: 400,
   },
 
-  consPrize: { cx: 455, cy: 265, font: '1100 22px "JetBrains Mono",monospace', color: '#000000' },
+  consPrize: { cx: 454, cy: 269, font: '900 22px "JetBrains Mono",monospace', color: '#000000', strokeWidth: 0.8 },
 
   second: {
     startX: 248, endX: 748,
     row1Y: 313, row2Y: 334,
     cols: 5,
     font: '900 19px "JetBrains Mono",monospace', color: '#000000',
+    strokeWidth: 0.8,
   },
 
   third: {
@@ -312,26 +322,28 @@ const EVENING = {
     row1Y: 376, row2Y: 396, row3Y: 420,
     cols: 5,
     font: '900 18px "JetBrains Mono",monospace', color: '#000000',
+    strokeWidth: 0.7,
   },
 
   fourth: {
     startX: 240, endX: 748,
-    row1Y: 466, row2Y: 486, row3Y: 510,
+    row1Y: 458, row2Y: 480, row3Y: 502,
     cols: 5,
     font: '900 18px "JetBrains Mono",monospace', color: '#000000',
+    strokeWidth: 0.7,
   },
 
   fifth: {
     tableLeft: 4, tableRight: 749,
-    rowStartY: 796, rowHeight: 18,
+    rowStartY: 792, rowHeight: 18,
     rows: 10, cols: 10,
-    font: '700 14px "JetBrains Mono",monospace', color: '#000000',
+    font: '900 14px "JetBrains Mono",monospace', color: '#000000',
+    strokeWidth: 0.6,
   },
 
   footer: {
-    leftDate:  { cx: 82,  cy: 1003, font: '900 15px "Poppins",Arial,sans-serif', color: '#D80027' },
-    time:      { cx: 377, cy: 1003, font: '900 18px "Poppins",Arial,sans-serif', color: '#072166' },
-    rightDate: { cx: 666, cy: 1003, font: '900 15px "Poppins",Arial,sans-serif', color: '#D80027' },
+    leftDate:  { cx: 60,  cy: 1003, font: '900 21px "Poppins",Arial,sans-serif', color: '#FFF' },
+    rightDate: { cx: 666, cy: 1003, font: '900 22px "Poppins",Arial,sans-serif', color: '#FFF' },
   },
 };
 
@@ -417,7 +429,7 @@ export async function renderPosterOnCanvas(canvas, data, options = {}) {
   const consNum = String(data.consPrizeNumber || '').trim();
   if (consNum) {
     const cp = L.consPrize;
-    drawCentred(ctx, consNum, cp.cx, cp.cy, cp.font, cp.color);
+    drawCentred(ctx, consNum, cp.cx, cp.cy, cp.font, cp.color, undefined, cp.strokeWidth);
   }
 
   // ── 6. 2nd Prize Numbers (10 numbers, 2 rows × 5 cols) ─────────────────────
@@ -430,10 +442,20 @@ export async function renderPosterOnCanvas(canvas, data, options = {}) {
     ctx.fillStyle = s.color;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
+    if (s.strokeWidth) {
+      ctx.lineWidth = s.strokeWidth;
+      ctx.strokeStyle = s.color;
+    }
     for (let c = 0; c < s.cols; c++) {
       const cx = s.startX + c * colW + colW / 2;
-      ctx.fillText(secNums[c]     || '', cx, s.row1Y);
-      ctx.fillText(secNums[c + 5] || '', cx, s.row2Y);
+      const n1 = secNums[c] || '';
+      const n2 = secNums[c + 5] || '';
+      if (s.strokeWidth) {
+        if (n1) ctx.strokeText(n1, cx, s.row1Y);
+        if (n2) ctx.strokeText(n2, cx, s.row2Y);
+      }
+      if (n1) ctx.fillText(n1, cx, s.row1Y);
+      if (n2) ctx.fillText(n2, cx, s.row2Y);
     }
     ctx.restore();
   }
@@ -449,10 +471,18 @@ export async function renderPosterOnCanvas(canvas, data, options = {}) {
     ctx.fillStyle = t.color;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
+    if (t.strokeWidth) {
+      ctx.lineWidth = t.strokeWidth;
+      ctx.strokeStyle = t.color;
+    }
     for (let r = 0; r < 3; r++) {
       for (let c = 0; c < t.cols; c++) {
         const cx = t.startX + c * colW + colW / 2;
-        ctx.fillText(thirdNums[r * 5 + c] || '', cx, rowYs[r]);
+        const val = thirdNums[r * 5 + c] || '';
+        if (val) {
+          if (t.strokeWidth) ctx.strokeText(val, cx, rowYs[r]);
+          ctx.fillText(val, cx, rowYs[r]);
+        }
       }
     }
     ctx.restore();
@@ -469,10 +499,18 @@ export async function renderPosterOnCanvas(canvas, data, options = {}) {
     ctx.fillStyle = f.color;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
+    if (f.strokeWidth) {
+      ctx.lineWidth = f.strokeWidth;
+      ctx.strokeStyle = f.color;
+    }
     for (let r = 0; r < 3; r++) {
       for (let c = 0; c < f.cols; c++) {
         const cx = f.startX + c * colW + colW / 2;
-        ctx.fillText(fourthNums[r * 5 + c] || '', cx, rowYs[r]);
+        const val = fourthNums[r * 5 + c] || '';
+        if (val) {
+          if (f.strokeWidth) ctx.strokeText(val, cx, rowYs[r]);
+          ctx.fillText(val, cx, rowYs[r]);
+        }
       }
     }
     ctx.restore();
@@ -488,11 +526,19 @@ export async function renderPosterOnCanvas(canvas, data, options = {}) {
     ctx.fillStyle = g.color;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
+    if (g.strokeWidth) {
+      ctx.lineWidth = g.strokeWidth;
+      ctx.strokeStyle = g.color;
+    }
     for (let r = 0; r < g.rows; r++) {
       const cy = g.rowStartY + r * g.rowHeight + g.rowHeight / 2;
       for (let c = 0; c < g.cols; c++) {
         const cx = g.tableLeft + c * colWidth + colWidth / 2;
-        ctx.fillText(fifthNums[r * g.cols + c] || '', cx, cy);
+        const val = fifthNums[r * g.cols + c] || '';
+        if (val) {
+          if (g.strokeWidth) ctx.strokeText(val, cx, cy);
+          ctx.fillText(val, cx, cy);
+        }
       }
     }
     ctx.restore();
