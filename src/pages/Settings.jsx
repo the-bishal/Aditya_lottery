@@ -314,7 +314,7 @@ export default function Settings() {
         <Divider sx={{ my: 2.5 }} />
 
         <Typography variant="caption" color="text.disabled" display="block" textAlign="center">
-          Aditya Lottery Admin Dashboard &nbsp;·&nbsp; Built with ❤️ &nbsp;·&nbsp; All processing is done offline in your browser
+          Tirupati Final Admin Dashboard &nbsp;·&nbsp; Built with ❤️ &nbsp;·&nbsp; All processing is done offline in your browser
         </Typography>
       </SettingsSection>
     </Container>

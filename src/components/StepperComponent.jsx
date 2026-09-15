@@ -43,6 +43,7 @@ import EditIcon           from '@mui/icons-material/Edit';
 import ImageIcon          from '@mui/icons-material/Image';
 
 import useLotteryStore from '../store/useLotteryStore';
+import PosterDesigner from './PosterDesigner';
 import {
   placeWinners,
   buildPlacementSummary,
@@ -1506,7 +1507,8 @@ function StepNumbers({ onNext, onBack }) {
 }
 
 // ── Step 3: Generate Result ────────────────────────────────────────────────────
-function StepGenerate({ onBack }) {
+function StepGenerate({ onBack, session = 'morning' }) {
+  const [viewMode, setViewMode] = useState('canvas'); // 'canvas' | 'card'
   const {
     rankArrays,
     resultTitle, setResultTitle,
@@ -1517,6 +1519,8 @@ function StepGenerate({ onBack }) {
   const previewRef              = useRef(null);
   const [loading, setLoading]   = useState(false);
   const [captured, setCaptured] = useState(false);
+
+  const isMorning = session === 'morning';
 
   const RANK_DISPLAY_ORDER = ['1CR', '2ND', '3RD', '4TH', '5TH'];
   const RANK_DISPLAY_LABELS = {
@@ -1531,7 +1535,7 @@ function StepGenerate({ onBack }) {
     '2ND': '#00E5FF',
     '3RD': '#FFA100',
     '4TH': '#B388FF',
-    '5TH': tokens.gold,
+    '5TH': '#F5C518',
   };
 
   // Only show ranks that have at least one placed number
@@ -1558,7 +1562,8 @@ function StepGenerate({ onBack }) {
     if (!resultImageURL) return;
     const link = document.createElement('a');
     link.href     = resultImageURL;
-    link.download = `${(resultTitle || 'result').replace(/\s+/g, '_')}_${resultDate || 'result'}.png`;
+    const sessionPrefix = isMorning ? 'Morning' : 'Evening';
+    link.download = `${sessionPrefix}_${(resultTitle || 'Lottery_Result').replace(/\s+/g, '_')}_${resultDate || 'draw'}.png`;
     link.click();
   };
 
@@ -1573,38 +1578,90 @@ function StepGenerate({ onBack }) {
 
   return (
     <StepContent>
-      {/* Configuration row */}
-      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr auto' }, gap: 2 }}>
-        <TextField
-          label="Result Title"
-          value={resultTitle}
-          onChange={(e) => setResultTitle(e.target.value)}
-          fullWidth
-          inputProps={{ 'aria-label': 'Result title' }}
-        />
-        <TextField
-          label="Draw Date"
-          type="date"
-          value={resultDate}
-          onChange={(e) => setResultDate(e.target.value)}
-          InputLabelProps={{ shrink: true }}
-          inputProps={{ 'aria-label': 'Draw date' }}
-          sx={{ minWidth: 160 }}
+      {/* View Mode Toggle Bar */}
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2.5, flexWrap: 'wrap', gap: 1.5 }}>
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <Button
+            variant={viewMode === 'canvas' ? 'contained' : 'outlined'}
+            size="small"
+            startIcon={<AutoAwesomeIcon />}
+            onClick={() => setViewMode('canvas')}
+            sx={{
+              fontWeight: 800,
+              background: viewMode === 'canvas' ? 'linear-gradient(135deg, #00c6ff, #0072ff)' : 'transparent',
+              color: '#fff',
+              borderColor: 'rgba(0, 210, 255, 0.4)',
+              boxShadow: viewMode === 'canvas' ? '0 4px 12px rgba(0, 114, 255, 0.35)' : 'none'
+            }}
+          >
+            🎨 Official Poster (HTML Canvas)
+          </Button>
+
+          <Button
+            variant={viewMode === 'card' ? 'contained' : 'outlined'}
+            size="small"
+            onClick={() => setViewMode('card')}
+            sx={{
+              fontWeight: 700,
+              color: viewMode === 'card' ? '#fff' : 'rgba(255,255,255,0.7)',
+              borderColor: 'rgba(255,255,255,0.2)'
+            }}
+          >
+            📱 Simple Card Preview
+          </Button>
+        </Box>
+
+        <Chip
+          label={isMorning ? '☀️ MORNING DRAW (02:00 PM)' : '🌙 EVENING DRAW (09:00 PM)'}
+          size="small"
+          sx={{
+            fontWeight: 800,
+            fontSize: '0.75rem',
+            background: isMorning ? 'rgba(245,197,24,0.18)' : 'rgba(179,136,255,0.18)',
+            color: isMorning ? tokens.gold : '#D1C4E9',
+            border: `1px solid ${isMorning ? 'rgba(245,197,24,0.40)' : 'rgba(179,136,255,0.40)'}`
+          }}
         />
       </Box>
 
-      {/* Result preview card (captured by html2canvas) */}
-      <Paper
-        ref={previewRef}
-        elevation={0}
-        sx={{
-          background: 'linear-gradient(145deg, #0D0D1A 0%, #121228 55%, #1A1A38 100%)',
-          borderRadius: '16px',
-          border: '1px solid rgba(245,197,24,0.28)',
-          p: { xs: 2.5, sm: 4 },
-          fontFamily: 'Poppins, sans-serif',
-        }}
-      >
+      {/* Mode 1: HTML Canvas Interactive Poster Designer */}
+      {viewMode === 'canvas' ? (
+        <PosterDesigner session={session} />
+      ) : (
+        /* Mode 2: Minimal Card Preview (html2canvas) */
+        <>
+          {/* Configuration row */}
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr auto' }, gap: 2 }}>
+            <TextField
+              label="Result Title"
+              value={resultTitle}
+              onChange={(e) => setResultTitle(e.target.value)}
+              fullWidth
+              inputProps={{ 'aria-label': 'Result title' }}
+            />
+            <TextField
+              label="Draw Date"
+              type="date"
+              value={resultDate}
+              onChange={(e) => setResultDate(e.target.value)}
+              InputLabelProps={{ shrink: true }}
+              inputProps={{ 'aria-label': 'Draw date' }}
+              sx={{ minWidth: 160 }}
+            />
+          </Box>
+
+          {/* Result preview card (captured by html2canvas) */}
+          <Paper
+            ref={previewRef}
+            elevation={0}
+            sx={{
+              background: 'linear-gradient(145deg, #0D0D1A 0%, #121228 55%, #1A1A38 100%)',
+              borderRadius: '16px',
+              border: isMorning ? '1px solid rgba(245,197,24,0.28)' : '1px solid rgba(179,136,255,0.28)',
+              p: { xs: 2.5, sm: 4 },
+              fontFamily: 'Poppins, sans-serif',
+            }}
+          >
         {/* Header */}
         <Box sx={{ textAlign: 'center', mb: 3 }}>
           <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 1.5, mb: 1 }}>
@@ -1624,15 +1681,30 @@ function StepGenerate({ onBack }) {
               {resultTitle || 'Lottery Result'}
             </Typography>
           </Box>
-          {resultDate && (
-            <Typography variant="body2" color="text.secondary">
-              Draw Date:{' '}
-              <Box component="strong" sx={{ color: tokens.textPrimary }}>
-                {formattedDate}
-              </Box>
-            </Typography>
-          )}
-          <Divider sx={{ mt: 2, borderColor: 'rgba(245,197,24,0.20)' }} />
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1.5, flexWrap: 'wrap', mt: 0.5 }}>
+            {resultDate && (
+              <Typography variant="body2" color="text.secondary">
+                Draw Date:{' '}
+                <Box component="strong" sx={{ color: tokens.textPrimary }}>
+                  {formattedDate}
+                </Box>
+              </Typography>
+            )}
+            <Chip
+              size="small"
+              label={isMorning ? '☀️ MORNING DRAW (02:00 PM)' : '🌙 EVENING DRAW (09:00 PM)'}
+              sx={{
+                background: isMorning ? 'rgba(245,197,24,0.18)' : 'rgba(179,136,255,0.18)',
+                color: isMorning ? tokens.goldLight : '#D1C4E9',
+                border: `1px solid ${isMorning ? 'rgba(245,197,24,0.40)' : 'rgba(179,136,255,0.40)'}`,
+                fontWeight: 800,
+                fontSize: '0.72rem',
+                letterSpacing: '0.04em',
+                height: '24px',
+              }}
+            />
+          </Box>
+          <Divider sx={{ mt: 2, borderColor: isMorning ? 'rgba(245,197,24,0.20)' : 'rgba(179,136,255,0.20)' }} />
         </Box>
 
         {/* Results by rank */}
@@ -1726,7 +1798,7 @@ function StepGenerate({ onBack }) {
         {/* Footer */}
         <Divider sx={{ mt: 2, mb: 1.5, borderColor: 'rgba(245,197,24,0.12)' }} />
         <Typography variant="caption" color="text.disabled" display="block" textAlign="center">
-          Generated by Aditya Lottery Admin Dashboard
+          Generated by Tirupati Final Admin Dashboard
         </Typography>
       </Paper>
 
@@ -1774,13 +1846,15 @@ function StepGenerate({ onBack }) {
         )}
       </Stack>
 
-      {captured && (
-        <Alert severity="success" icon={<CheckCircleIcon fontSize="inherit" />}>
-          Result image generated! Click <strong>Download PNG</strong> to save.
-        </Alert>
+        {captured && (
+          <Alert severity="success" icon={<CheckCircleIcon fontSize="inherit" />}>
+            Result image generated! Click <strong>Download PNG</strong> to save.
+          </Alert>
+        )}
+        </>
       )}
 
-      <Box sx={{ pt: 1 }}>
+      <Box sx={{ pt: 2 }}>
         <Button variant="outlined" startIcon={<ArrowBackIcon />} onClick={onBack}>
           Back
         </Button>
@@ -1821,9 +1895,12 @@ function CustomStepIcon({ active, completed, icon }) {
 }
 
 // ── Main Stepper Shell ────────────────────────────────────────────────────────
-export default function StepperComponent() {
+export default function StepperComponent({ session: propSession }) {
   const [activeStep, setActiveStep] = useState(0);
-  const [session, setSession] = useState('MORNING');
+  const storeSession = useLotteryStore((s) => s.activeSession);
+  const session = (propSession || storeSession || 'morning').toLowerCase();
+  const isMorning = session === 'morning';
+
   const { resultDate, setResultDate, drawNumber, setDrawNumber } = useLotteryStore();
 
   const next = () => setActiveStep((s) => s + 1);
@@ -1831,33 +1908,41 @@ export default function StepperComponent() {
 
   return (
     <Box>
-      {/* ── Draw Config Bar (Matches Screenshot) ── */}
+      {/* ── Draw Config Bar ── */}
       <Paper
         sx={{
           p: 2,
           mb: 3,
           background: 'rgba(255,255,255,0.02)',
-          border: `1px solid ${tokens.border}`,
+          border: isMorning ? `1px solid rgba(245,197,24,0.25)` : `1px solid rgba(179,136,255,0.25)`,
           borderRadius: '12px',
         }}
       >
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1.5, mb: 1.5 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <Chip
-              label={session}
-              color="error"
+              label={isMorning ? '☀️ MORNING DRAW (02:00 PM)' : '🌙 EVENING DRAW (09:00 PM)'}
               size="small"
-              onClick={() => {
-                const nextSession = session === 'MORNING' ? 'DAY' : session === 'DAY' ? 'EVENING' : 'MORNING';
-                setSession(nextSession);
+              sx={{
+                fontWeight: 800,
+                fontSize: '0.75rem',
+                height: 26,
+                background: isMorning ? 'rgba(245,197,24,0.18)' : 'rgba(179,136,255,0.18)',
+                color: isMorning ? tokens.gold : '#D1C4E9',
+                border: isMorning ? `1px solid ${tokens.goldBorder}` : '1px solid rgba(179,136,255,0.40)',
               }}
-              sx={{ fontWeight: 800, fontSize: '0.75rem', height: 26, cursor: 'pointer' }}
             />
             <Chip
-              label={`DRAW ${drawNumber || '1'}`}
+              label={`DRAW ${drawNumber || (isMorning ? '1' : '2')}`}
               variant="outlined"
               size="small"
-              sx={{ fontWeight: 800, fontSize: '0.75rem', height: 26, color: tokens.gold, borderColor: tokens.goldBorder }}
+              sx={{
+                fontWeight: 800,
+                fontSize: '0.75rem',
+                height: 26,
+                color: isMorning ? tokens.gold : '#B388FF',
+                borderColor: isMorning ? tokens.goldBorder : 'rgba(179,136,255,0.30)',
+              }}
             />
           </Box>
           <Typography variant="caption" sx={{ color: tokens.textMuted, fontFamily: 'monospace' }}>
@@ -1949,7 +2034,7 @@ export default function StepperComponent() {
 
         {activeStep === 0 && <StepExclude onNext={next} />}
         {activeStep === 1 && <StepNumbers onNext={next} onBack={back} />}
-        {activeStep === 2 && <StepGenerate onBack={back} />}
+        {activeStep === 2 && <StepGenerate onBack={back} session={session} />}
       </Paper>
     </Box>
   );

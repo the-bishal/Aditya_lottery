@@ -154,7 +154,7 @@ export default function Home() {
                 backgroundClip: 'text',
               }}
             >
-              Aditya Lottery
+              Tirupati Final
             </Typography>
             <Typography
               component="p"
@@ -240,7 +240,7 @@ export default function Home() {
               letterSpacing: '0.02em',
             }}
           >
-            Aditya Lottery Admin &nbsp;·&nbsp; All data processed locally &nbsp;·&nbsp; No internet required
+            Tirupati Final Admin &nbsp;·&nbsp; All data processed locally &nbsp;·&nbsp; No internet required
           </Typography>
         </Box>
       </Container>

@@ -38,7 +38,7 @@ export default function TopBar() {
           component="a"
           href="/"
           onClick={(e) => { e.preventDefault(); navigate('/'); }}
-          aria-label="Aditya Lottery — Go to home"
+          aria-label="Tirupati Final — Go to home"
           sx={{
             display: 'flex',
             alignItems: 'center',
@@ -88,7 +88,7 @@ export default function TopBar() {
                 whiteSpace: 'nowrap',
               }}
             >
-              Aditya Lottery
+              Tirupati Final
             </Typography>
             <Typography
               component="span"

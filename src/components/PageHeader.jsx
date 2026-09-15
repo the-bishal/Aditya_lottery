@@ -27,6 +27,7 @@ export default function PageHeader({
   title,
   subtitle,
   breadcrumb,
+  breadcrumbs,
   action,
 }) {
   const navigate = useNavigate();
@@ -65,15 +66,55 @@ export default function PageHeader({
           <HomeIcon sx={{ fontSize: 13 }} />
           Home
         </Link>
-        <Typography
-          sx={{
-            fontSize: '0.8rem',
-            fontWeight: 600,
-            color: tokens.gold,
-          }}
-        >
-          {breadcrumb || title}
-        </Typography>
+        {Array.isArray(breadcrumbs) && breadcrumbs.length > 0 ? (
+          breadcrumbs.map((item, idx) => {
+            const isLast = idx === breadcrumbs.length - 1;
+            if (isLast || !item.path) {
+              return (
+                <Typography
+                  key={item.label}
+                  sx={{
+                    fontSize: '0.8rem',
+                    fontWeight: 600,
+                    color: tokens.gold,
+                  }}
+                >
+                  {item.label}
+                </Typography>
+              );
+            }
+            return (
+              <Link
+                key={item.label}
+                component="button"
+                underline="hover"
+                onClick={() => navigate(item.path)}
+                sx={{
+                  cursor: 'pointer',
+                  color: tokens.textSecondary,
+                  fontSize: '0.8rem',
+                  fontWeight: 500,
+                  border: 'none',
+                  background: 'none',
+                  padding: 0,
+                  '&:hover': { color: tokens.gold },
+                }}
+              >
+                {item.label}
+              </Link>
+            );
+          })
+        ) : (
+          <Typography
+            sx={{
+              fontSize: '0.8rem',
+              fontWeight: 600,
+              color: tokens.gold,
+            }}
+          >
+            {breadcrumb || title}
+          </Typography>
+        )}
       </Breadcrumbs>
 
       {/* Title row */}

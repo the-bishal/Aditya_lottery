@@ -30,7 +30,72 @@ function emptyRankArrays() {
   return ALL_RANKS.reduce((acc, r) => { acc[r] = []; return acc; }, {});
 }
 
+function createInitialSessionState(session = 'morning') {
+  return {
+    excludedRangeText: '',
+    excludedCodeSet:   new Set(),
+    ocrProgress:       0,
+    ocrStatus:         'idle',
+    ocrEntries:        [],
+    rankArrays:        emptyRankArrays(),
+    generationStatus:  'idle',
+    placementStatus:   'idle',
+    saveStatus:        'idle',
+    saveError:         '',
+    autoFillLogs:      [],
+    uploadedImageURLs: [],
+    resultImageURL:    null,
+    resultTitle:       session === 'evening' ? 'Evening Lottery Result' : 'Morning Lottery Result',
+    resultDate:        new Date().toISOString().split('T')[0],
+    drawNumber:        session === 'evening' ? '2' : '1',
+  };
+}
+
 const useLotteryStore = create((set, _get) => ({
+  // ── Session Slot Support (Morning / Evening) ───────────────────────────────
+  activeSession: 'morning', // 'morning' | 'evening'
+  sessionData: {
+    morning: createInitialSessionState('morning'),
+    evening: createInitialSessionState('evening'),
+  },
+
+  switchSession: (session) => {
+    const validSession = session === 'evening' ? 'evening' : 'morning';
+    const state = _get();
+    if (state.activeSession === validSession) return;
+
+    const prevSession = state.activeSession;
+    const currentSnapshot = {
+      excludedRangeText: state.excludedRangeText,
+      excludedCodeSet:   state.excludedCodeSet,
+      ocrProgress:       state.ocrProgress,
+      ocrStatus:         state.ocrStatus,
+      ocrEntries:        state.ocrEntries,
+      rankArrays:        state.rankArrays,
+      generationStatus:  state.generationStatus,
+      placementStatus:   state.placementStatus,
+      saveStatus:        state.saveStatus,
+      saveError:         state.saveError,
+      autoFillLogs:      state.autoFillLogs,
+      uploadedImageURLs: state.uploadedImageURLs,
+      resultImageURL:    state.resultImageURL,
+      resultTitle:       state.resultTitle,
+      resultDate:        state.resultDate,
+      drawNumber:        state.drawNumber,
+    };
+
+    const nextState = state.sessionData[validSession] || createInitialSessionState(validSession);
+
+    set({
+      activeSession: validSession,
+      sessionData: {
+        ...state.sessionData,
+        [prevSession]: currentSnapshot,
+      },
+      ...nextState,
+    });
+  },
+
   // ── Step 1: Exclusion (code-based) ───────────────────────────────────────────
   excludedRangeText: '',        // raw textarea — pasted prize blocks
   excludedCodeSet:   new Set(), // Set<string> of 2-digit codes, e.g. {"01","62","47"}

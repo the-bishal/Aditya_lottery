@@ -8,11 +8,12 @@ import theme from './theme';
 import TopBar from './components/TopBar';
 
 // ── Lazy-loaded pages ─────────────────────────────────────────────────────────
-const Home          = React.lazy(() => import('./pages/Home'));
-const ResultGen     = React.lazy(() => import('./pages/ResultGen'));
-const Hardcopy      = React.lazy(() => import('./pages/Hardcopy'));
-const MiddleNumbers = React.lazy(() => import('./pages/MiddleNumbers'));
-const Settings      = React.lazy(() => import('./pages/Settings'));
+const Home                = React.lazy(() => import('./pages/Home'));
+const ResultSessionSelect = React.lazy(() => import('./pages/ResultSessionSelect'));
+const ResultGen           = React.lazy(() => import('./pages/ResultGen'));
+const Hardcopy            = React.lazy(() => import('./pages/Hardcopy'));
+const MiddleNumbers       = React.lazy(() => import('./pages/MiddleNumbers'));
+const Settings            = React.lazy(() => import('./pages/Settings'));
 
 // ── Page loading skeleton ─────────────────────────────────────────────────────
 function PageLoader() {
@@ -75,7 +76,10 @@ export default function App() {
           <Suspense fallback={<PageLoader />}>
             <Routes>
               <Route path="/"               element={<Home />} />
-              <Route path="/result"         element={<ResultGen />} />
+              <Route path="/result"         element={<ResultSessionSelect />} />
+              <Route path="/result/morning" element={<ResultGen session="morning" />} />
+              <Route path="/result/evening" element={<ResultGen session="evening" />} />
+              <Route path="/result/:session" element={<ResultGen />} />
               <Route path="/hardcopy"       element={<Hardcopy />} />
               <Route path="/middle-numbers" element={<MiddleNumbers />} />
               <Route path="/settings"       element={<Settings />} />
