@@ -165,14 +165,59 @@ export function runAutoFill({ rankArrays = {}, excludedCodeSet = new Set() }) {
   }
 
   // 5. Fill 5TH (Capacity: 100, 4 digits)
+  // Distribute across 10 prefix buckets (0000-0999, 1000-1999, ..., 9000-9999) with 10 numbers per bucket
   const cap5 = RANK_CAPACITIES['5TH'] || 100;
   const needed5 = Math.max(0, cap5 - updatedArrays['5TH'].length);
-  for (let i = 0; i < needed5; i++) {
-    const num = generateCandidate(4, excludedCodeSet, existingSet);
-    updatedArrays['5TH'].push(num);
-    existingSet.add(num);
-    filledDiff['5TH'] += 1;
+  if (needed5 > 0) {
+    const bucketCounts = Array(10).fill(0);
+    updatedArrays['5TH'].forEach((num) => {
+      const firstChar = String(num).trim().charAt(0);
+      const d = parseInt(firstChar, 10);
+      if (!isNaN(d) && d >= 0 && d <= 9) {
+        bucketCounts[d]++;
+      }
+    });
+
+    let remainingNeeded = needed5;
+    for (let d = 0; d <= 9 && remainingNeeded > 0; d++) {
+      const neededInBucket = Math.max(0, 10 - bucketCounts[d]);
+      const toAdd = Math.min(neededInBucket, remainingNeeded);
+      for (let i = 0; i < toAdd; i++) {
+        let candidate = null;
+        for (let attempt = 0; attempt < 1000; attempt++) {
+          const numStr = `${d}${randomDigits(3)}`;
+          if (existingSet.has(numStr)) continue;
+          const code = extractExclusionCode(numStr);
+          if (excludedCodeSet && excludedCodeSet.has(code)) continue;
+          candidate = numStr;
+          break;
+        }
+        if (!candidate) candidate = generateCandidate(4, excludedCodeSet, existingSet);
+        updatedArrays['5TH'].push(candidate);
+        existingSet.add(candidate);
+        filledDiff['5TH'] += 1;
+        bucketCounts[d]++;
+        remainingNeeded--;
+      }
+    }
+
+    while (remainingNeeded > 0) {
+      const num = generateCandidate(4, excludedCodeSet, existingSet);
+      updatedArrays['5TH'].push(num);
+      existingSet.add(num);
+      filledDiff['5TH'] += 1;
+      remainingNeeded--;
+    }
   }
+
+  // Sort prize ranks in ascending numerical order
+  const sortNumeric = (arr) =>
+    [...arr].sort((a, b) => Number(String(a).replace(/\D/g, '')) - Number(String(b).replace(/\D/g, '')));
+
+  updatedArrays['2ND'] = sortNumeric(updatedArrays['2ND']);
+  updatedArrays['3RD'] = sortNumeric(updatedArrays['3RD']);
+  updatedArrays['4TH'] = sortNumeric(updatedArrays['4TH']);
+  updatedArrays['5TH'] = sortNumeric(updatedArrays['5TH']);
 
   // Total winners placed across all ranks
   const totalPlaced =

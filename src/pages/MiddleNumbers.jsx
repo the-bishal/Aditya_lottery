@@ -7,7 +7,6 @@ import Button from '@mui/material/Button';
 import TextField from '@mui/material/TextField';
 import Chip from '@mui/material/Chip';
 import Alert from '@mui/material/Alert';
-import Divider from '@mui/material/Divider';
 import Tooltip from '@mui/material/Tooltip';
 import IconButton from '@mui/material/IconButton';
 import CircularProgress from '@mui/material/CircularProgress';
@@ -17,7 +16,6 @@ import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
 import FormatListNumberedIcon from '@mui/icons-material/FormatListNumbered';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
-import CheckIcon from '@mui/icons-material/Check';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import VerifiedIcon from '@mui/icons-material/Verified';
 import RestartAltIcon from '@mui/icons-material/RestartAlt';
@@ -68,6 +66,24 @@ export default function MiddleNumbers() {
   const [copyMessage, setCopyMessage] = useState('');
   const [activeTab, setActiveTab] = useState(0); // 0: Visual Cards, 1: Raw Output
 
+  // Maximum available unique sets (each set requires 8 distinct 2-digit middle numbers)
+  const maxAvailableSets = useMemo(() => {
+    const excludedCount = excludedCodeSet?.size || 0;
+    const available = Math.max(0, 100 - excludedCount);
+    return Math.floor(available / 8);
+  }, [excludedCodeSet]);
+
+  // Quick preset counts clamped by maximum available sets
+  const presetList = useMemo(() => {
+    const base = [1, 2, 5, 8, 10, 12];
+    const filtered = base.filter((p) => p <= maxAvailableSets);
+    if (maxAvailableSets > 0 && !filtered.includes(maxAvailableSets) && maxAvailableSets <= 12) {
+      filtered.push(maxAvailableSets);
+      filtered.sort((a, b) => a - b);
+    }
+    return filtered.length > 0 ? filtered : [1];
+  }, [maxAvailableSets]);
+
   // Validate user sets input
   const validateInput = useCallback((val) => {
     if (!val || String(val).trim() === '') {
@@ -80,11 +96,11 @@ export default function MiddleNumbers() {
     if (isNaN(n) || n <= 0) {
       return 'Number of sets must be greater than 0.';
     }
-    if (n > 100) {
-      return 'Maximum 100 sets can be generated at a time.';
+    if (n > maxAvailableSets) {
+      return `Maximum ${maxAvailableSets} unique sets can be generated at a time (100 total middle codes, 8 per set).`;
     }
     return '';
-  }, []);
+  }, [maxAvailableSets]);
 
   // Handle generation
   const handleGenerate = useCallback(() => {
@@ -244,10 +260,10 @@ export default function MiddleNumbers() {
               }}
               onKeyDown={handleKeyDown}
               error={Boolean(inputError)}
-              helperText={inputError}
-              inputProps={{ min: 1, max: 100, step: 1, 'aria-label': 'Number of sets to generate' }}
+              helperText={inputError || (maxAvailableSets < 12 ? `Max ${maxAvailableSets} sets (${excludedCodeSet?.size || 0} codes excluded)` : '')}
+              inputProps={{ min: 1, max: maxAvailableSets, step: 1, 'aria-label': 'Number of sets to generate' }}
               sx={{
-                width: { xs: '100%', sm: 180 },
+                width: { xs: '100%', sm: 200 },
                 '& .MuiOutlinedInput-root.Mui-focused fieldset': { borderColor: ACCENT },
                 '& .MuiInputLabel-root.Mui-focused': { color: ACCENT },
               }}
@@ -258,7 +274,7 @@ export default function MiddleNumbers() {
               <Typography variant="caption" color="text.secondary" sx={{ mr: 0.5 }}>
                 Quick:
               </Typography>
-              {[1, 2, 5, 10, 20].map((preset) => (
+              {presetList.map((preset) => (
                 <Chip
                   key={preset}
                   label={`${preset} Set${preset > 1 ? 's' : ''}`}
@@ -361,7 +377,7 @@ export default function MiddleNumbers() {
         >
           <strong>NEW {middleGeneratedSets.length} SETS (Verified)</strong> — Successfully generated{' '}
           <strong>{middleGeneratedSets.length * 8}</strong> total prize blocks across{' '}
-          <strong>{middleGeneratedSets.length}</strong> independent sets. All 3-digit middle numbers are unique with zero overlapping ranges.
+          <strong>{middleGeneratedSets.length}</strong> independent sets. All 2-digit middle numbers are strictly unique with zero duplicates and zero overlapping ranges.
         </Alert>
       )}
 
@@ -414,7 +430,7 @@ export default function MiddleNumbers() {
               fontWeight: 700,
             }}
           >
-            Generate 5 Sets Now
+            Generate {Math.min(5, maxAvailableSets)} Sets Now
           </Button>
         </Paper>
       ) : (
@@ -567,18 +583,34 @@ export default function MiddleNumbers() {
                               {row.prize}
                             </Box>
 
-                            {/* Middle Prefix tag */}
-                            <Tooltip title={`Middle Prefix: ${row.prefix}`}>
-                              <Typography
-                                variant="caption"
-                                sx={{
-                                  fontFamily: "'JetBrains Mono', monospace",
-                                  color: 'text.disabled',
-                                  fontSize: '0.75rem',
-                                }}
-                              >
-                                #{row.prefix}
-                              </Typography>
+                            {/* Middle Number Badge and Prefix */}
+                            <Tooltip title={`2-digit Middle: ${row.middle || row.prefix.slice(1)} | Prefix: ${row.prefix}`}>
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                                <Chip
+                                  label={`Mid ${row.middle || row.prefix.slice(1)}`}
+                                  size="small"
+                                  sx={{
+                                    height: 20,
+                                    fontSize: '0.68rem',
+                                    fontWeight: 700,
+                                    fontFamily: "'JetBrains Mono', monospace",
+                                    background: 'rgba(142,68,173,0.18)',
+                                    color: '#D7BDE2',
+                                    border: '1px solid rgba(142,68,173,0.35)',
+                                    cursor: 'help',
+                                  }}
+                                />
+                                <Typography
+                                  variant="caption"
+                                  sx={{
+                                    fontFamily: "'JetBrains Mono', monospace",
+                                    color: 'text.disabled',
+                                    fontSize: '0.72rem',
+                                  }}
+                                >
+                                  #{row.prefix}
+                                </Typography>
+                              </Box>
                             </Tooltip>
                           </Box>
 

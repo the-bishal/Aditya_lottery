@@ -30,15 +30,114 @@ import LooksTwoIcon from '@mui/icons-material/LooksTwo';
 import Looks3Icon from '@mui/icons-material/Looks3';
 import Looks4Icon from '@mui/icons-material/Looks4';
 import Looks5Icon from '@mui/icons-material/Looks5';
+import SortIcon from '@mui/icons-material/Sort';
 
 import { DEFAULT_POSTER_DATA } from '../utils/defaultPosterData';
-import { renderPosterOnCanvas, DAY_KEYS, DAY_LABELS, resolveDayKey } from '../utils/posterCanvasRenderer';
+import {
+  renderPosterOnCanvas,
+  DAY_KEYS,
+  DAY_LABELS,
+  resolveDayKey,
+  sortNumbersAscending,
+  arrange5thPrizeGrid,
+} from '../utils/posterCanvasRenderer';
 import useLotteryStore from '../store/useLotteryStore';
 
 export default function PosterDesigner({ session = 'morning' }) {
   const store = useLotteryStore();
   const isMorning = session === 'morning';
   const [templateSession, setTemplateSession] = useState(isMorning ? 'morning' : 'evening');
+
+  // ── Extract winning data helper ─────────────────────────────────────────────
+  const extractWinningDataFromStore = useCallback(() => {
+    const isCurrentSession = !session || session === store.activeSession;
+    const directArrays = (isCurrentSession ? store.rankArrays : store.sessionData?.[session]?.rankArrays) || store.rankArrays || {};
+
+    const ra = {
+      '1CR': [...(directArrays['1CR'] || [])],
+      '2ND': [...(directArrays['2ND'] || [])],
+      '3RD': [...(directArrays['3RD'] || [])],
+      '4TH': [...(directArrays['4TH'] || [])],
+      '5TH': [...(directArrays['5TH'] || [])],
+    };
+
+    // Also include any ocrEntries assigned to ranks that haven't been placed yet
+    const entries = store.ocrEntries || [];
+    if (entries.length > 0) {
+      for (const entry of entries) {
+        const r = (entry.rank || '').toUpperCase().trim();
+        let num = (entry.number || '').trim();
+        if (['2ND', '3RD', '4TH', '5TH'].includes(r)) {
+          num = num.replace(/\D/g, '');
+        }
+        if (r && ra[r] && num) {
+          if (!ra[r].includes(num)) {
+            ra[r].push(num);
+          }
+        }
+      }
+    }
+
+    const metaDate = (isCurrentSession ? store.resultDate : store.sessionData?.[session]?.resultDate) || store.resultDate;
+    const metaDrawNum = (isCurrentSession ? store.drawNumber : store.sessionData?.[session]?.drawNumber) || store.drawNumber;
+
+    const patch = {};
+    let hasAnyWinner = false;
+
+    if (ra['1CR']?.length > 0) {
+      const ticket = String(ra['1CR'][0]).trim();
+      patch.firstPrizeTicket = ticket;
+      const m = ticket.match(/\d{5}$/) || ticket.match(/\d{5}/);
+      if (m) patch.consPrizeNumber = m[0];
+      hasAnyWinner = true;
+    }
+
+    // Check for explicit consolation entry in ocrEntries
+    const consEntry = entries.find(
+      (e) => /cons/i.test(e.rank || '') || /cons/i.test(e.raw || '') || /cons/i.test(e.source || '')
+    );
+    if (consEntry && consEntry.number) {
+      const m = consEntry.number.match(/\d{5}/);
+      if (m) patch.consPrizeNumber = m[0];
+    }
+
+    if (ra['2ND']?.length > 0) {
+      patch.secondPrizeNumbers = sortNumbersAscending(ra['2ND']);
+      hasAnyWinner = true;
+    }
+
+    if (ra['3RD']?.length > 0) {
+      patch.thirdPrizeNumbers = sortNumbersAscending(ra['3RD']);
+      hasAnyWinner = true;
+    }
+
+    if (ra['4TH']?.length > 0) {
+      patch.fourthPrizeNumbers = sortNumbersAscending(ra['4TH']);
+      hasAnyWinner = true;
+    }
+
+    if (ra['5TH']?.length > 0) {
+      patch.fifthPrizeNumbers = arrange5thPrizeGrid(ra['5TH']);
+      hasAnyWinner = true;
+    }
+
+    if (metaDate) {
+      try {
+        const d = new Date(metaDate);
+        if (!isNaN(d.getTime())) {
+          const pad = (n) => String(n).padStart(2, '0');
+          patch.drawDate = `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
+          patch.day = DAY_KEYS[d.getDay()];
+        }
+      } catch { /* keep existing */ }
+    }
+
+    if (metaDrawNum) {
+      patch.drawNumber = String(metaDrawNum);
+    }
+
+    return { patch, hasAnyWinner };
+  }, [session, store]);
 
   // Only dynamic overlay fields
   const [posterData, setPosterData] = useState(() => {
@@ -55,6 +154,49 @@ export default function PosterDesigner({ session = 'morning' }) {
       initial.drawTime     = '9 PM';
       initial.drawSubtitle = 'GOLD THURSDAY WEEKLY LOTTERY';
     }
+
+    // Immediately overlay store winning numbers if present on mount
+    const isCurrentSession = !session || session === store.activeSession;
+    const directArrays = (isCurrentSession ? store.rankArrays : store.sessionData?.[session]?.rankArrays) || store.rankArrays || {};
+    const entries = store.ocrEntries || [];
+
+    const ra = {
+      '1CR': [...(directArrays['1CR'] || [])],
+      '2ND': [...(directArrays['2ND'] || [])],
+      '3RD': [...(directArrays['3RD'] || [])],
+      '4TH': [...(directArrays['4TH'] || [])],
+      '5TH': [...(directArrays['5TH'] || [])],
+    };
+    for (const entry of entries) {
+      const r = (entry.rank || '').toUpperCase().trim();
+      let num = (entry.number || '').trim();
+      if (['2ND', '3RD', '4TH', '5TH'].includes(r)) num = num.replace(/\D/g, '');
+      if (r && ra[r] && num && !ra[r].includes(num)) ra[r].push(num);
+    }
+
+    if (ra['1CR']?.length > 0) {
+      initial.firstPrizeTicket = String(ra['1CR'][0]).trim();
+      const m = initial.firstPrizeTicket.match(/\d{5}$/) || initial.firstPrizeTicket.match(/\d{5}/);
+      if (m) initial.consPrizeNumber = m[0];
+    }
+    if (ra['2ND']?.length > 0) initial.secondPrizeNumbers = sortNumbersAscending(ra['2ND']);
+    if (ra['3RD']?.length > 0) initial.thirdPrizeNumbers  = sortNumbersAscending(ra['3RD']);
+    if (ra['4TH']?.length > 0) initial.fourthPrizeNumbers = sortNumbersAscending(ra['4TH']);
+    if (ra['5TH']?.length > 0) initial.fifthPrizeNumbers  = arrange5thPrizeGrid(ra['5TH']);
+
+    const metaDate = (isCurrentSession ? store.resultDate : store.sessionData?.[session]?.resultDate) || store.resultDate;
+    if (metaDate) {
+      try {
+        const d = new Date(metaDate);
+        if (!isNaN(d.getTime())) {
+          initial.drawDate = `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
+          initial.day = DAY_KEYS[d.getDay()];
+        }
+      } catch { /* ignore */ }
+    }
+    const metaDrawNum = (isCurrentSession ? store.drawNumber : store.sessionData?.[session]?.drawNumber) || store.drawNumber;
+    if (metaDrawNum) initial.drawNumber = String(metaDrawNum);
+
     return initial;
   });
 
@@ -67,43 +209,20 @@ export default function PosterDesigner({ session = 'morning' }) {
   const canvasRef = useRef(null);
 
   // ── Sync winning numbers from store ────────────────────────────────────────
-  const syncFromStore = useCallback(() => {
-    const sd = store.sessionData?.[session] || store;
-    const ra = sd.rankArrays || {};
-    const patch = {};
-
-    if (ra['1CR']?.length > 0) {
-      patch.firstPrizeTicket = String(ra['1CR'][0]);
-      const m = patch.firstPrizeTicket.match(/\d{5}$/);
-      if (m) patch.consPrizeNumber = m[0];
+  const syncFromStore = useCallback((silent = false) => {
+    const { patch, hasAnyWinner } = extractWinningDataFromStore();
+    if (hasAnyWinner || patch.drawDate || patch.drawNumber) {
+      setPosterData((prev) => ({ ...prev, ...patch }));
+      if (!silent) {
+        showNotification('Synced winning numbers from current draw session!');
+      }
     }
-    if (ra['2ND']?.length > 0) patch.secondPrizeNumbers = ra['2ND'].slice(0, 10).map(String);
-    if (ra['3RD']?.length > 0) patch.thirdPrizeNumbers  = ra['3RD'].slice(0, 15).map(String);
-    if (ra['4TH']?.length > 0) patch.fourthPrizeNumbers = ra['4TH'].slice(0, 15).map(String);
-    if (ra['5TH']?.length > 0) patch.fifthPrizeNumbers  = ra['5TH'].slice(0, 100).map(String);
+  }, [extractWinningDataFromStore]);
 
-    if (sd.resultDate) {
-      try {
-        const d = new Date(sd.resultDate);
-        if (!isNaN(d.getTime())) {
-          patch.drawDate = `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
-          patch.day = DAY_KEYS[d.getDay()];
-        }
-      } catch { /* keep existing */ }
-    }
-    if (sd.drawNumber) patch.drawNumber = String(sd.drawNumber);
-
-    setPosterData(prev => ({ ...prev, ...patch }));
-    showNotification('Synced winning numbers from current draw session!');
-  }, [session, store]);
-
-  // Initial auto-sync if store has data
+  // Keep posterData in sync whenever store updates
   useEffect(() => {
-    const sd = store.sessionData?.[session] || store;
-    if (sd.rankArrays?.['1CR']?.length > 0 || sd.rankArrays?.['5TH']?.length > 0) {
-      syncFromStore();
-    }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    syncFromStore(true);
+  }, [store.rankArrays, store.ocrEntries, store.resultDate, store.drawNumber, syncFromStore]);
 
   const activeDay = posterData.day || resolveDayKey(null, posterData.drawDate, posterData.drawSubtitle);
 
@@ -147,27 +266,77 @@ export default function PosterDesigner({ session = 'morning' }) {
     setPosterData(prev => ({ ...prev, [key]: numbers }));
   };
 
+  const handleSortAllAscending = () => {
+    setPosterData((prev) => ({
+      ...prev,
+      secondPrizeNumbers: sortNumbersAscending(prev.secondPrizeNumbers || []),
+      thirdPrizeNumbers: sortNumbersAscending(prev.thirdPrizeNumbers || []),
+      fourthPrizeNumbers: sortNumbersAscending(prev.fourthPrizeNumbers || []),
+      fifthPrizeNumbers: arrange5thPrizeGrid(prev.fifthPrizeNumbers || []),
+    }));
+    showNotification('All prize numbers arranged in ascending order!');
+  };
+
   // ── Export Helpers ──────────────────────────────────────────────────────────
-  const exportCanvas = async (type, quality) => {
-    const exp = document.createElement('canvas');
-    await renderPosterOnCanvas(exp, posterData, {
-      session: templateSession,
-      day: posterData.day || activeDay,
-      scale: 1,
-    });
-    exp.toBlob((blob) => {
-      if (!blob) return;
-      const url  = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href  = url;
-      const d    = (posterData.drawDate || 'draw').replace(/\//g, '-');
-      const t    = (posterData.drawTime || 'time').replace(/\s+/g, '');
+  const exportCanvas = async (type = 'image/png', quality = 0.95) => {
+    try {
+      // Use the live canvas element if available for instant, 100% accurate export
+      let canvas = canvasRef.current;
+      if (!canvas) {
+        canvas = document.createElement('canvas');
+        await renderPosterOnCanvas(canvas, posterData, {
+          session: templateSession,
+          day: posterData.day || activeDay,
+          scale: 1,
+        });
+      }
+
+      const d = (posterData.drawDate || 'draw').replace(/[\/\.]/g, '-');
+      const t = (posterData.drawTime || 'time').replace(/\s+/g, '');
       const daySuffix = (posterData.day || activeDay).toUpperCase();
-      link.download = `Rajshree_${templateSession}_${daySuffix}_${d}_${t}.${type === 'image/png' ? 'png' : 'jpg'}`;
-      link.click();
-      URL.revokeObjectURL(url);
-      showNotification(`Downloaded ${type === 'image/png' ? 'PNG' : 'JPG'} (753 × 1024)`);
-    }, type, quality);
+      const ext = type === 'image/png' ? 'png' : 'jpg';
+      const fileName = `Rajshree_${templateSession}_${daySuffix}_${d}_${t}.${ext}`;
+
+      const triggerDownload = (downloadUrl) => {
+        const link = document.createElement('a');
+        link.href = downloadUrl;
+        link.download = fileName;
+        link.style.display = 'none';
+        document.body.appendChild(link);
+        link.click();
+        setTimeout(() => {
+          if (document.body.contains(link)) {
+            document.body.removeChild(link);
+          }
+        }, 200);
+        showNotification(`Downloaded ${ext.toUpperCase()} (753 × 1024)`);
+      };
+
+      if (canvas.toBlob) {
+        canvas.toBlob(
+          (blob) => {
+            if (blob) {
+              const url = URL.createObjectURL(blob);
+              triggerDownload(url);
+              // Delay revocation so download manager has plenty of time to save
+              setTimeout(() => URL.revokeObjectURL(url), 10000);
+            } else {
+              // Fallback to data URL
+              const dataUrl = canvas.toDataURL(type, quality);
+              triggerDownload(dataUrl);
+            }
+          },
+          type,
+          quality
+        );
+      } else {
+        const dataUrl = canvas.toDataURL(type, quality);
+        triggerDownload(dataUrl);
+      }
+    } catch (err) {
+      console.error('Export error:', err);
+      showNotification(`Export failed: ${err.message}`);
+    }
   };
 
   const handleCopyClipboard = async () => {
@@ -243,7 +412,17 @@ export default function PosterDesigner({ session = 'morning' }) {
                 </Typography>
               </Box>
 
-              <Box sx={{ display: 'flex', gap: 1 }}>
+              <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                <Tooltip title="Arrange 2nd, 3rd, 4th, and 5th prize numbers in ascending order">
+                  <Button
+                    size="small" variant="outlined"
+                    startIcon={<SortIcon />}
+                    onClick={handleSortAllAscending}
+                    sx={{ borderColor: 'rgba(105,240,174,0.4)', color: '#69F0AE', fontSize: '0.75rem', '&:hover': { borderColor: '#69F0AE', background: 'rgba(105,240,174,0.08)' } }}
+                  >
+                    Sort Ascending
+                  </Button>
+                </Tooltip>
                 <Tooltip title="Sync winning numbers from Step 2">
                   <Button
                     size="small" variant="outlined"
@@ -384,7 +563,7 @@ export default function PosterDesigner({ session = 'morning' }) {
                   value={posterData.firstPrizeTicket}
                   onChange={(e) => handleFieldChange('firstPrizeTicket', e.target.value)}
                   helperText="Series letters + space + 5 digits"
-                  inputProps={{ style: { fontFamily: 'monospace', fontWeight: 700, fontSize: '1.05rem', letterSpacing: '0.08em' } }}
+                  inputProps={{ style: { fontFamily: "'Arial Black', Arial, sans-serif", fontWeight: 900, fontSize: '1.05rem', letterSpacing: '0.08em' } }}
                 />
                 <TextField
                   label="Consolation Last-5 Digits"
@@ -393,7 +572,7 @@ export default function PosterDesigner({ session = 'morning' }) {
                   value={posterData.consPrizeNumber}
                   onChange={(e) => handleFieldChange('consPrizeNumber', e.target.value)}
                   helperText="The 5-digit number shown after 'for Seller ₹500/-'"
-                  inputProps={{ style: { fontFamily: 'monospace', fontWeight: 700 } }}
+                  inputProps={{ style: { fontFamily: "'Arial Black', Arial, sans-serif", fontWeight: 900 } }}
                 />
               </AccordionDetails>
             </Accordion>
@@ -417,7 +596,7 @@ export default function PosterDesigner({ session = 'morning' }) {
                   value={posterData.secondPrizeNumbers?.join(' ') || ''}
                   onChange={(e) => handleArrayFieldChange('secondPrizeNumbers', e.target.value)}
                   helperText="10 space-separated 5-digit numbers"
-                  inputProps={{ style: { fontFamily: 'monospace', fontSize: '0.9rem', letterSpacing: '0.04em' } }}
+                  inputProps={{ style: { fontFamily: "'Arial Black', Arial, sans-serif", fontWeight: 900, fontSize: '0.85rem', letterSpacing: '0.04em' } }}
                 />
               </AccordionDetails>
             </Accordion>
@@ -441,7 +620,7 @@ export default function PosterDesigner({ session = 'morning' }) {
                   value={posterData.thirdPrizeNumbers?.join(' ') || ''}
                   onChange={(e) => handleArrayFieldChange('thirdPrizeNumbers', e.target.value)}
                   helperText="15 space-separated 4-digit numbers"
-                  inputProps={{ style: { fontFamily: 'monospace', fontSize: '0.9rem', letterSpacing: '0.04em' } }}
+                  inputProps={{ style: { fontFamily: "'Arial Black', Arial, sans-serif", fontWeight: 900, fontSize: '0.85rem', letterSpacing: '0.04em' } }}
                 />
               </AccordionDetails>
             </Accordion>
@@ -465,7 +644,7 @@ export default function PosterDesigner({ session = 'morning' }) {
                   value={posterData.fourthPrizeNumbers?.join(' ') || ''}
                   onChange={(e) => handleArrayFieldChange('fourthPrizeNumbers', e.target.value)}
                   helperText="15 space-separated 4-digit numbers"
-                  inputProps={{ style: { fontFamily: 'monospace', fontSize: '0.9rem', letterSpacing: '0.04em' } }}
+                  inputProps={{ style: { fontFamily: "'Arial Black', Arial, sans-serif", fontWeight: 900, fontSize: '0.85rem', letterSpacing: '0.04em' } }}
                 />
               </AccordionDetails>
             </Accordion>
@@ -490,7 +669,7 @@ export default function PosterDesigner({ session = 'morning' }) {
                   value={posterData.fifthPrizeNumbers?.join(' ') || ''}
                   onChange={(e) => handleArrayFieldChange('fifthPrizeNumbers', e.target.value)}
                   helperText="Leading zeros are strictly preserved (e.g. 0044, 0847)"
-                  inputProps={{ style: { fontFamily: 'monospace', fontSize: '0.8rem', letterSpacing: '0.03em' } }}
+                  inputProps={{ style: { fontFamily: "'Arial Black', Arial, sans-serif", fontWeight: 900, fontSize: '0.8rem', letterSpacing: '0.03em' } }}
                 />
               </AccordionDetails>
             </Accordion>

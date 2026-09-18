@@ -1561,10 +1561,17 @@ function StepGenerate({ onBack, session = 'morning' }) {
   const handleDownload = () => {
     if (!resultImageURL) return;
     const link = document.createElement('a');
-    link.href     = resultImageURL;
+    link.href = resultImageURL;
     const sessionPrefix = isMorning ? 'Morning' : 'Evening';
     link.download = `${sessionPrefix}_${(resultTitle || 'Lottery_Result').replace(/\s+/g, '_')}_${resultDate || 'draw'}.png`;
+    link.style.display = 'none';
+    document.body.appendChild(link);
     link.click();
+    setTimeout(() => {
+      if (document.body.contains(link)) {
+        document.body.removeChild(link);
+      }
+    }, 200);
   };
 
   const formattedDate = useMemo(() => {
@@ -1714,7 +1721,10 @@ function StepGenerate({ onBack, session = 'morning' }) {
           </Typography>
         ) : (
           filledRanks.map((rank) => {
-            const numbers = rankArrays[rank] ?? [];
+            const rawNumbers = rankArrays[rank] ?? [];
+            const numbers = ['2ND', '3RD', '4TH', '5TH'].includes(rank)
+              ? [...rawNumbers].sort((a, b) => Number(String(a).replace(/\D/g, '')) - Number(String(b).replace(/\D/g, '')))
+              : rawNumbers;
             const color   = RANK_DISPLAY_COLORS[rank];
             const is1Cr   = rank === '1CR';
             return (
@@ -1764,8 +1774,8 @@ function StepGenerate({ onBack, session = 'morning' }) {
                         background: `${color}18`,
                         border: `1.5px solid ${color}55`,
                         color,
-                        fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
-                        fontWeight: 700,
+                        fontFamily: "'Arial Black', 'Arial', sans-serif",
+                        fontWeight: 900,
                         fontSize: is1Cr ? '1.05rem' : '0.86rem',
                         lineHeight: 1,
                         letterSpacing: 0,

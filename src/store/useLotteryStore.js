@@ -181,14 +181,52 @@ const useLotteryStore = create((set, _get) => ({
   // Counters and Step 3 both read directly from this — never from OCR counts.
   rankArrays: emptyRankArrays(),
 
-  setRankArrays: (rankArrays) => set({ rankArrays }),
+  setRankArrays: (rankArrays) =>
+    set((state) => {
+      const active = state.activeSession || 'morning';
+      return {
+        rankArrays,
+        sessionData: {
+          ...state.sessionData,
+          [active]: {
+            ...(state.sessionData?.[active] || {}),
+            rankArrays,
+          },
+        },
+      };
+    }),
 
   setRankArray: (rank, arr) =>
-    set((state) => ({
-      rankArrays: { ...state.rankArrays, [rank]: arr },
-    })),
+    set((state) => {
+      const active = state.activeSession || 'morning';
+      const newRankArrays = { ...state.rankArrays, [rank]: arr };
+      return {
+        rankArrays: newRankArrays,
+        sessionData: {
+          ...state.sessionData,
+          [active]: {
+            ...(state.sessionData?.[active] || {}),
+            rankArrays: newRankArrays,
+          },
+        },
+      };
+    }),
 
-  resetRankArrays: () => set({ rankArrays: emptyRankArrays() }),
+  resetRankArrays: () =>
+    set((state) => {
+      const active = state.activeSession || 'morning';
+      const empty = emptyRankArrays();
+      return {
+        rankArrays: empty,
+        sessionData: {
+          ...state.sessionData,
+          [active]: {
+            ...(state.sessionData?.[active] || {}),
+            rankArrays: empty,
+          },
+        },
+      };
+    }),
 
   // ── Workflow Operation Statuses (Decoupled Generation vs Save) ────────────────
   generationStatus: 'idle', // 'idle' | 'generating' | 'success' | 'error'
@@ -221,9 +259,48 @@ const useLotteryStore = create((set, _get) => ({
   drawNumber:     '1',
 
   setResultImageURL: (url)   => set({ resultImageURL: url }),
-  setResultTitle:    (title) => set({ resultTitle: title }),
-  setResultDate:     (date)  => set({ resultDate: date }),
-  setDrawNumber:     (num)   => set({ drawNumber: num }),
+  setResultTitle:    (title) =>
+    set((state) => {
+      const active = state.activeSession || 'morning';
+      return {
+        resultTitle: title,
+        sessionData: {
+          ...state.sessionData,
+          [active]: {
+            ...(state.sessionData?.[active] || {}),
+            resultTitle: title,
+          },
+        },
+      };
+    }),
+  setResultDate: (date) =>
+    set((state) => {
+      const active = state.activeSession || 'morning';
+      return {
+        resultDate: date,
+        sessionData: {
+          ...state.sessionData,
+          [active]: {
+            ...(state.sessionData?.[active] || {}),
+            resultDate: date,
+          },
+        },
+      };
+    }),
+  setDrawNumber: (num) =>
+    set((state) => {
+      const active = state.activeSession || 'morning';
+      return {
+        drawNumber: num,
+        sessionData: {
+          ...state.sessionData,
+          [active]: {
+            ...(state.sessionData?.[active] || {}),
+            drawNumber: num,
+          },
+        },
+      };
+    }),
 
   // ── Hardcopy Module ───────────────────────────────────────────────────────────
   hardcopyNumbers:     [],

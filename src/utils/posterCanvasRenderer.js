@@ -21,6 +21,62 @@
 // ─── Day of Week Constants & Helpers ────────────────────────────────────────
 export const DAY_KEYS = ['sun', 'mon', 'tues', 'wed', 'thur', 'fri', 'sat'];
 
+/**
+ * Sorts numbers in ascending numerical order while preserving string format and leading zeros.
+ *
+ * @param {string[]} arr
+ * @returns {string[]}
+ */
+export function sortNumbersAscending(arr) {
+  if (!Array.isArray(arr)) return [];
+  return [...arr]
+    .filter((n) => n != null && String(n).trim() !== '')
+    .map(String)
+    .sort((a, b) => {
+      const cleanA = a.trim();
+      const cleanB = b.trim();
+      const numA = Number(cleanA.replace(/\D/g, ''));
+      const numB = Number(cleanB.replace(/\D/g, ''));
+      if (isNaN(numA) || isNaN(numB)) {
+        return cleanA.localeCompare(cleanB);
+      }
+      return numA - numB;
+    });
+}
+
+/**
+ * Arranges 5th prize numbers into a 10×10 grid in ascending order:
+ * - Each column (0 to 9) is sorted in ascending order from top to bottom.
+ * - Each row (0 to 9) is sorted in ascending order from left to right.
+ * Matches Indian lottery ticket standards and DEFAULT_POSTER_DATA row-major layout.
+ *
+ * @param {string[]} arr
+ * @returns {string[]} length 100 array in row-major order (row * 10 + col)
+ */
+export function arrange5thPrizeGrid(arr) {
+  if (!Array.isArray(arr)) return [];
+  const clean = arr.filter((n) => n != null && String(n).trim() !== '').map(String);
+  if (clean.length === 0) return [];
+
+  const sorted = sortNumbersAscending(clean);
+  const total = sorted.length;
+  const cols = 10;
+  const rows = Math.min(10, Math.ceil(total / cols) || 1);
+  const grid = new Array(Math.max(total, 100)).fill('');
+
+  for (let i = 0; i < total; i++) {
+    const col = Math.floor(i / rows);
+    const row = i % rows;
+    if (col < cols) {
+      grid[row * cols + col] = sorted[i];
+    } else {
+      grid[i] = sorted[i];
+    }
+  }
+
+  return grid;
+}
+
 export const DAY_LABELS = {
   sun: 'Sunday',
   mon: 'Monday',
@@ -219,131 +275,105 @@ const H = 1024;  // template height
  * Pixel-measured coordinates (753×1024 template):
  *   DRAW row (yellow band):  y=138–178  → centre y=158
  *   1st Prize white box:     y=191–239  → centre y=215
- *   Consolation bar:         y=280–292  → centre y=286
- *   2nd Prize white zone:    y=292–347  → rows at y=313, 334
- *   3rd Prize white zone:    y=356–440  → rows at y=376, 400, 424
- *   4th Prize white zone:    y=448–530  → rows at y=467, 490, 513
- *   5th Prize grid:          y=796–975  → rowH=18, startY=805
- *   Footer yellow band:      y=998–1012 → centre y=1003
  */
 const MORNING = {
-  // Draw Number — in the DRAW No. red area (yellow band, right of the DRAW label)
-  drawNumber: { cx: 400, cy: 163, font: '900 27px "Poppins", Arial, sans-serif', color: '#D80027' },
+  // Draw Number: in the yellow band box
+  drawNumber: { cx: 405, cy: 159, font: '900 28px "Arial Black", Arial, sans-serif', color: '#D80027' },
 
-  // Draw Date — green pill immediately right of the draw number
-  drawDate: {
-    cx: 530, cy: 163,
-    font: '900 28px "Poppins", Arial, sans-serif', color: '#FFFFFF',
-  },
+  // Draw Date: centered in pill next to draw number
+  drawDate: { cx: 524, cy: 162, font: '900 28px "Arial Black", Arial, sans-serif', color: '#FFFFFF' },
 
-  // 1st Prize ticket — large white box (y=191–239), centred
+  // 1st Prize ticket: large white box, centered horizontally at cx=502, cy=216
   firstPrize: {
-    cx: 480, cy: 219,
-    font: '900 40px "JetBrains Mono","Courier New",monospace',
-    color: '#D80027', maxW: 400,
+    cx: 475, cy: 220,
+    font: ' 55px "Arial Black", Arial, sans-serif',
+    color: '#D80027', maxW: 390,
   },
 
-  // Consolation last-5 digits — thin strip at y=280–292; number after the label
-  consPrize: { cx: 455, cy: 265, font: '900 22px "JetBrains Mono",monospace', color: '#000000', strokeWidth: 0.8 },
+  // Consolation last-5 digits: strip after 'for Seller ₹500/-'
+  consPrize: { cx: 450, cy: 266.5, font: '22px "Arial Black", Arial, sans-serif', color: '#000000'},
 
-  // 2nd Prize — white zone y=292–347 → 2 rows of 5 numbers
+  // 2nd Prize: 2 rows of 5 numbers
   second: {
-    startX: 240, endX: 748,
-    row1Y: 313, row2Y: 334,
-    cols: 5,
-    font: '900 19px "JetBrains Mono",monospace', color: '#000000',
-    strokeWidth: 0.8,
+    cols: [329.5, 412, 495.5, 578, 662],
+    rows: [307, 332.5],
+    font: ' 22px "Arial Black", Arial, sans-serif', color: '#000000',
   },
 
-  // 3rd Prize — blue badge zone y=356–440 → 3 rows of 5 numbers
+  // 3rd Prize: 3 rows of 5 numbers
   third: {
-    startX: 240, endX: 748,
-    row1Y: 376, row2Y: 400, row3Y: 424,
-    cols: 5,
-    font: '900 18px "JetBrains Mono",monospace', color: '#000000',
-    strokeWidth: 0.7,
+    cols: [338, 418, 496, 574, 652],
+    rows: [374, 399, 423.5],
+    font: ' 25px "Arial Black", Arial, sans-serif', color: '#000000',
   },
 
-  // 4th Prize — brown badge zone y=448–530 → 3 rows of 5 numbers
+  // 4th Prize: 3 rows of 5 numbers
   fourth: {
-    startX: 240, endX: 748,
-    row1Y: 467, row2Y: 490, row3Y: 513,
-    cols: 5,
-    font: '900 18px "JetBrains Mono",monospace', color: '#000000',
-    strokeWidth: 0.7,
+    cols: [340, 416.5, 494.5, 572.5, 650],
+    rows: [464.5, 489.5, 514.5],
+    font: ' 24.5px "Arial Black", Arial, sans-serif', color: '#000000',
+
   },
 
-  // 5th Prize grid — white area y=796–975, 10 rows × 10 cols
+  // 5th Prize grid: 10 rows × 10 cols
   fifth: {
-    tableLeft: 4, tableRight: 749,
-    rowStartY: 796, rowHeight: 18,
-    rows: 10, cols: 10,
-    font: '900 14px "JetBrains Mono",monospace', color: '#000000',
-    strokeWidth: 0.6,
+    cols: [40.5, 113.3, 187.1, 260.9, 334.7, 410.5, 485.3, 559.1, 632.9, 706.7],
+    rows: [800, 818, 836, 854, 872, 890, 908, 926, 944, 962],
+    font: '18px "Arial Black", Arial, sans-serif', color: '#000000',
   },
 
-  // Footer bar — yellow band y=998–1012
+  // Footer bar: yellow band
   footer: {
-    leftDate:  { cx: 78,  cy: 1003, font: '900 25px "Poppins",Arial,sans-serif', color: '#D80027' },
-    rightDate: { cx: 674, cy: 1003, font: '900 25px "Poppins",Arial,sans-serif', color: '#D80027' },
+    leftDate:  { cx: 82,  cy: 1001, font: ' 24px "Arial Black", Arial, sans-serif', color: '#D80027' },
+    rightDate: { cx: 673, cy: 1001, font: ' 24px "Arial Black", Arial, sans-serif', color: '#D80027' },
   },
 };
 
 /**
  * EVENING (9 PM) — Gold Thursday Weekly Lottery
- * Very similar layout to MORNING; minor vertical adjustments for different header height.
+ * Very similar layout to MORNING; calibrated to match exact official sample.
  */
 const EVENING = {
-  drawNumber: { cx: 400, cy: 163, font: '900 27px "Poppins", Arial, sans-serif', color: '#072166' },
+  drawNumber: { cx: 418, cy: 159, font: '900 28px "Arial Black", Arial, sans-serif', color: '#D80027' },
 
-  drawDate: {
-    cx: 530, cy: 163,
-    font: '900 24px "Poppins", Arial, sans-serif', color: '#FFFFFF',
-  },
+  drawDate: { cx: 524, cy: 159, font: '900 26px "Arial Black", Arial, sans-serif', color: '#FFFFFF' },
 
   firstPrize: {
-    cx: 480, cy: 221,
-    font: '900 40px "JetBrains Mono","Courier New",monospace',
-    color: '#D80027', maxW: 400,
+    cx: 475, cy: 220,
+    font: '900 48px "Arial Black", Arial, sans-serif',
+    color: '#D80027', maxW: 390,
   },
 
-  consPrize: { cx: 454, cy: 269, font: '900 22px "JetBrains Mono",monospace', color: '#000000', strokeWidth: 0.8 },
+  consPrize: { cx: 450, cy: 266.5, font: '900 22px "Arial Black", Arial, sans-serif', color: '#000000', strokeWidth: 0.2 },
 
   second: {
-    startX: 248, endX: 748,
-    row1Y: 313, row2Y: 334,
-    cols: 5,
-    font: '900 19px "JetBrains Mono",monospace', color: '#000000',
-    strokeWidth: 0.8,
+    cols: [329.5, 412, 495.5, 578, 662],
+    rows: [307, 332.5],
+    font: '22px "Arial Black", Arial, sans-serif', color: '#000000',
   },
 
   third: {
-    startX: 240, endX: 748,
-    row1Y: 376, row2Y: 396, row3Y: 420,
-    cols: 5,
-    font: '900 18px "JetBrains Mono",monospace', color: '#000000',
-    strokeWidth: 0.7,
+    cols: [338, 418, 496, 574, 652],
+    rows: [374, 399, 423.5],
+    font: ' 25px "Arial Black", Arial, sans-serif', color: '#000000',
   },
 
   fourth: {
-    startX: 240, endX: 748,
-    row1Y: 458, row2Y: 480, row3Y: 502,
-    cols: 5,
-    font: '900 18px "JetBrains Mono",monospace', color: '#000000',
-    strokeWidth: 0.7,
+    cols: [340, 416.5, 494.5, 572.5, 650],
+    rows: [464.5, 489.5, 514.5],
+    font: ' 24.5px "Arial Black", Arial, sans-serif', color: '#000000',
   },
 
   fifth: {
-    tableLeft: 4, tableRight: 749,
-    rowStartY: 792, rowHeight: 18,
-    rows: 10, cols: 10,
-    font: '900 14px "JetBrains Mono",monospace', color: '#000000',
-    strokeWidth: 0.6,
+    cols: [40.5, 113.3, 186.1, 259.9, 331.7, 412.5, 485.3, 559.1, 632.9, 708.7],
+    rows: [800, 818, 836, 854, 872, 890, 908, 926, 944, 962],
+    font: ' 18px "Arial Black", Arial, sans-serif', color: '#000000',
+
   },
 
   footer: {
-    leftDate:  { cx: 60,  cy: 1003, font: '900 21px "Poppins",Arial,sans-serif', color: '#FFF' },
-    rightDate: { cx: 666, cy: 1003, font: '900 22px "Poppins",Arial,sans-serif', color: '#FFF' },
+    leftDate:  { cx: 64,  cy: 1001, font: ' 20px "Arial Black", Arial, sans-serif', color: '#D80027' },
+    rightDate: { cx: 673, cy: 1001, font: ' 24px "Arial Black", Arial, sans-serif', color: '#D80027' },
   },
 };
 
@@ -404,17 +434,18 @@ export async function renderPosterOnCanvas(canvas, data, options = {}) {
   drawCentred(ctx, drawNum, L.drawNumber.cx, L.drawNumber.cy,
     L.drawNumber.font, L.drawNumber.color);
 
-  // ── 3. Draw Date (in green pill) ────────────────────────────────────────────
+  // ── 3. Draw Date ────────────────────────────────────────────────────────────
   const dateText = String(data.drawDate || '');
   if (dateText) {
     const d = L.drawDate;
-    // Green pill background
-    ctx.save();
-    ctx.fillStyle = d.pillColor;
-    ctx.beginPath();
-    roundRectPath(ctx, d.pillX, d.pillY, d.pillW, d.pillH, d.pillR);
-    ctx.fill();
-    ctx.restore();
+    if (d.pillColor) {
+      ctx.save();
+      ctx.fillStyle = d.pillColor;
+      ctx.beginPath();
+      roundRectPath(ctx, d.pillX, d.pillY, d.pillW, d.pillH, d.pillR);
+      ctx.fill();
+      ctx.restore();
+    }
     drawCentred(ctx, dateText, d.cx, d.cy, d.font, d.color);
   }
 
@@ -433,10 +464,9 @@ export async function renderPosterOnCanvas(canvas, data, options = {}) {
   }
 
   // ── 6. 2nd Prize Numbers (10 numbers, 2 rows × 5 cols) ─────────────────────
-  const secNums = Array.isArray(data.secondPrizeNumbers) ? data.secondPrizeNumbers : [];
+  const secNums = sortNumbersAscending(Array.isArray(data.secondPrizeNumbers) ? data.secondPrizeNumbers : []);
   {
     const s = L.second;
-    const colW = (s.endX - s.startX) / s.cols;
     ctx.save();
     ctx.font = s.font;
     ctx.fillStyle = s.color;
@@ -446,26 +476,24 @@ export async function renderPosterOnCanvas(canvas, data, options = {}) {
       ctx.lineWidth = s.strokeWidth;
       ctx.strokeStyle = s.color;
     }
-    for (let c = 0; c < s.cols; c++) {
-      const cx = s.startX + c * colW + colW / 2;
+    for (let c = 0; c < 5; c++) {
+      const cx = s.cols[c];
       const n1 = secNums[c] || '';
       const n2 = secNums[c + 5] || '';
       if (s.strokeWidth) {
-        if (n1) ctx.strokeText(n1, cx, s.row1Y);
-        if (n2) ctx.strokeText(n2, cx, s.row2Y);
+        if (n1) ctx.strokeText(n1, cx, s.rows[0]);
+        if (n2) ctx.strokeText(n2, cx, s.rows[1]);
       }
-      if (n1) ctx.fillText(n1, cx, s.row1Y);
-      if (n2) ctx.fillText(n2, cx, s.row2Y);
+      if (n1) ctx.fillText(n1, cx, s.rows[0]);
+      if (n2) ctx.fillText(n2, cx, s.rows[1]);
     }
     ctx.restore();
   }
 
   // ── 7. 3rd Prize Numbers (15 numbers, 3 rows × 5 cols) ─────────────────────
-  const thirdNums = Array.isArray(data.thirdPrizeNumbers) ? data.thirdPrizeNumbers : [];
+  const thirdNums = sortNumbersAscending(Array.isArray(data.thirdPrizeNumbers) ? data.thirdPrizeNumbers : []);
   {
     const t = L.third;
-    const colW = (t.endX - t.startX) / t.cols;
-    const rowYs = [t.row1Y, t.row2Y, t.row3Y];
     ctx.save();
     ctx.font = t.font;
     ctx.fillStyle = t.color;
@@ -476,12 +504,12 @@ export async function renderPosterOnCanvas(canvas, data, options = {}) {
       ctx.strokeStyle = t.color;
     }
     for (let r = 0; r < 3; r++) {
-      for (let c = 0; c < t.cols; c++) {
-        const cx = t.startX + c * colW + colW / 2;
+      for (let c = 0; c < 5; c++) {
+        const cx = t.cols[c];
         const val = thirdNums[r * 5 + c] || '';
         if (val) {
-          if (t.strokeWidth) ctx.strokeText(val, cx, rowYs[r]);
-          ctx.fillText(val, cx, rowYs[r]);
+          if (t.strokeWidth) ctx.strokeText(val, cx, t.rows[r]);
+          ctx.fillText(val, cx, t.rows[r]);
         }
       }
     }
@@ -489,11 +517,9 @@ export async function renderPosterOnCanvas(canvas, data, options = {}) {
   }
 
   // ── 8. 4th Prize Numbers (15 numbers, 3 rows × 5 cols) ─────────────────────
-  const fourthNums = Array.isArray(data.fourthPrizeNumbers) ? data.fourthPrizeNumbers : [];
+  const fourthNums = sortNumbersAscending(Array.isArray(data.fourthPrizeNumbers) ? data.fourthPrizeNumbers : []);
   {
     const f = L.fourth;
-    const colW = (f.endX - f.startX) / f.cols;
-    const rowYs = [f.row1Y, f.row2Y, f.row3Y];
     ctx.save();
     ctx.font = f.font;
     ctx.fillStyle = f.color;
@@ -504,12 +530,12 @@ export async function renderPosterOnCanvas(canvas, data, options = {}) {
       ctx.strokeStyle = f.color;
     }
     for (let r = 0; r < 3; r++) {
-      for (let c = 0; c < f.cols; c++) {
-        const cx = f.startX + c * colW + colW / 2;
+      for (let c = 0; c < 5; c++) {
+        const cx = f.cols[c];
         const val = fourthNums[r * 5 + c] || '';
         if (val) {
-          if (f.strokeWidth) ctx.strokeText(val, cx, rowYs[r]);
-          ctx.fillText(val, cx, rowYs[r]);
+          if (f.strokeWidth) ctx.strokeText(val, cx, f.rows[r]);
+          ctx.fillText(val, cx, f.rows[r]);
         }
       }
     }
@@ -517,10 +543,9 @@ export async function renderPosterOnCanvas(canvas, data, options = {}) {
   }
 
   // ── 9. 5th Prize Numbers (100 numbers, 10 rows × 10 cols) ──────────────────
-  const fifthNums = Array.isArray(data.fifthPrizeNumbers) ? data.fifthPrizeNumbers : [];
+  const fifthNums = arrange5thPrizeGrid(Array.isArray(data.fifthPrizeNumbers) ? data.fifthPrizeNumbers : []);
   {
     const g = L.fifth;
-    const colWidth = (g.tableRight - g.tableLeft) / g.cols;
     ctx.save();
     ctx.font = g.font;
     ctx.fillStyle = g.color;
@@ -530,11 +555,11 @@ export async function renderPosterOnCanvas(canvas, data, options = {}) {
       ctx.lineWidth = g.strokeWidth;
       ctx.strokeStyle = g.color;
     }
-    for (let r = 0; r < g.rows; r++) {
-      const cy = g.rowStartY + r * g.rowHeight + g.rowHeight / 2;
-      for (let c = 0; c < g.cols; c++) {
-        const cx = g.tableLeft + c * colWidth + colWidth / 2;
-        const val = fifthNums[r * g.cols + c] || '';
+    for (let r = 0; r < 10; r++) {
+      const cy = g.rows[r];
+      for (let c = 0; c < 10; c++) {
+        const cx = g.cols[c];
+        const val = fifthNums[r * 10 + c] || '';
         if (val) {
           if (g.strokeWidth) ctx.strokeText(val, cx, cy);
           ctx.fillText(val, cx, cy);
@@ -552,5 +577,7 @@ export async function renderPosterOnCanvas(canvas, data, options = {}) {
     drawCentred(ctx, footDate, L.footer.leftDate.cx,  L.footer.leftDate.cy,  L.footer.leftDate.font,  L.footer.leftDate.color);
     drawCentred(ctx, footDate, L.footer.rightDate.cx, L.footer.rightDate.cy, L.footer.rightDate.font, L.footer.rightDate.color);
   }
-  drawCentred(ctx, footTime, L.footer.time.cx, L.footer.time.cy, L.footer.time.font, L.footer.time.color);
+  if (L.footer?.time) {
+    drawCentred(ctx, footTime, L.footer.time.cx, L.footer.time.cy, L.footer.time.font, L.footer.time.color);
+  }
 }

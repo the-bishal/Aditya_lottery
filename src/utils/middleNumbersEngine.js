@@ -99,7 +99,12 @@ export function generateRangeForTier(prefix, type) {
 /**
  * Generate N complete Middle Number sets.
  *
- * @param {number} setCount - integer from 1 to 100
+ * In lottery operations, the "Middle Number" is the 2-digit code
+ * formed by digits[1] + digits[2] of each 5-digit number (from "00" to "99").
+ * This engine guarantees that every single row across all generated sets has
+ * a strictly unique 2-digit middle number with ZERO duplicates.
+ *
+ * @param {number} setCount - integer from 1 up to maximum available unique sets
  * @param {object} [options]
  * @param {Set<string>} [options.excludedCodeSet] - optional 2-digit exclusion codes to skip
  * @returns {{ sets: Array, error?: string }}
@@ -117,53 +122,57 @@ export function generateMiddleSets(setCount, options = {}) {
   if (isNaN(n) || n <= 0) {
     return { sets: [], error: 'Number of sets must be a positive integer (at least 1).' };
   }
-  if (n > 100) {
-    return { sets: [], error: 'Maximum 100 sets can be generated at a time.' };
-  }
 
   const { excludedCodeSet = null } = options;
-  const rowsPerSet = PRIZE_TIERS.length; // 8 rows
-  const totalPrefixesNeeded = n * rowsPerSet;
+  const rowsPerSet = PRIZE_TIERS.length; // 8 rows per set
 
-  // Pool of all 3-digit prefixes from 000 to 999
-  const candidatePrefixes = [];
-  for (let i = 0; i <= 999; i++) {
-    const pStr = String(i).padStart(3, '0');
-    // If exclusion codes are provided, check if prefix code (digits[1]+digits[2]) is excluded
-    if (excludedCodeSet && excludedCodeSet.size > 0) {
-      // For 5-digit number starting with prefix pStr, code is pStr[1] + pStr[2]
-      const code = pStr[1] + pStr[2];
-      if (excludedCodeSet.has(code)) continue;
-    }
-    candidatePrefixes.push(pStr);
+  // Pool of all 100 possible 2-digit middle numbers from "00" to "99"
+  const allMiddleCodes = [];
+  for (let i = 0; i <= 99; i++) {
+    allMiddleCodes.push(String(i).padStart(2, '0'));
   }
 
-  if (candidatePrefixes.length < totalPrefixesNeeded) {
+  // Filter out any codes present in the exclusion set
+  const availableMiddleCodes = allMiddleCodes.filter((code) => {
+    if (excludedCodeSet && excludedCodeSet.size > 0) {
+      return !excludedCodeSet.has(code);
+    }
+    return true;
+  });
+
+  const totalMiddlesNeeded = n * rowsPerSet;
+  const maxPossibleSets = Math.floor(availableMiddleCodes.length / rowsPerSet);
+
+  if (n > maxPossibleSets) {
     return {
       sets: [],
-      error: `Not enough unique middle numbers available (needed ${totalPrefixesNeeded}, available ${candidatePrefixes.length}).`,
+      error: `Cannot generate ${n} sets without duplicate middle numbers. With ${availableMiddleCodes.length} available middle numbers, maximum possible unique sets is ${maxPossibleSets}.`,
     };
   }
 
-  // Fisher-Yates shuffle to randomly pick non-overlapping prefixes
-  for (let i = candidatePrefixes.length - 1; i > 0; i--) {
+  // Fisher-Yates shuffle to randomly pick non-overlapping 2-digit middle numbers
+  for (let i = availableMiddleCodes.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
-    [candidatePrefixes[i], candidatePrefixes[j]] = [candidatePrefixes[j], candidatePrefixes[i]];
+    [availableMiddleCodes[i], availableMiddleCodes[j]] = [availableMiddleCodes[j], availableMiddleCodes[i]];
   }
 
-  const selectedPrefixes = candidatePrefixes.slice(0, totalPrefixesNeeded);
+  const selectedMiddles = availableMiddleCodes.slice(0, totalMiddlesNeeded);
   const sets = [];
-  let prefixIdx = 0;
+  let middleIdx = 0;
 
   for (let s = 1; s <= n; s++) {
     const rows = [];
     for (const tier of PRIZE_TIERS) {
-      const prefix = selectedPrefixes[prefixIdx++];
+      const mid = selectedMiddles[middleIdx++];
+      // Choose a balanced first digit (0-9) so the 3-digit prefix is well-distributed
+      const firstDigit = Math.floor(Math.random() * 10);
+      const prefix = `${firstDigit}${mid}`;
       const range = generateRangeForTier(prefix, tier.type);
       rows.push({
         prize: tier.prize,
         id: tier.id,
         prefix,
+        middle: mid,
         start: range.start,
         end: range.end,
         count: range.count,
@@ -197,6 +206,7 @@ export function verifyMiddleSets(sets, expectedCount) {
     errors.push(`Set count mismatch: expected ${expectedCount}, got ${sets.length}.`);
   }
 
+  const globalMiddleCodes = new Set();
   const globalPrefixes = new Set();
   const globalRanges = [];
 
@@ -229,6 +239,18 @@ export function verifyMiddleSets(sets, expectedCount) {
         errors.push(`Set ${setNum}, Row ${rIdx + 1}: invalid 3-digit prefix "${row.prefix}".`);
       }
 
+      // Check 2-digit middle number format
+      const middleCode = row.middle || (row.prefix && row.prefix.length === 3 ? row.prefix.slice(1) : '');
+      if (!/^\d{2}$/.test(middleCode)) {
+        errors.push(`Set ${setNum}, Row ${rIdx + 1}: invalid 2-digit middle number "${middleCode}".`);
+      }
+
+      // Strict duplicate middle number check across all rows and sets
+      if (globalMiddleCodes.has(middleCode)) {
+        errors.push(`Duplicate middle number "${middleCode}" found in Set ${setNum}, Row ${rIdx + 1} (${row.start} - ${row.end}).`);
+      }
+      globalMiddleCodes.add(middleCode);
+
       // Check start/end format (5 digits)
       if (!/^\d{5}$/.test(row.start) || !/^\d{5}$/.test(row.end)) {
         errors.push(`Set ${setNum}, Row ${rIdx + 1}: numbers must be exactly 5 digits (${row.start} - ${row.end}).`);
@@ -248,7 +270,7 @@ export function verifyMiddleSets(sets, expectedCount) {
 
       // Duplicate prefix check
       if (globalPrefixes.has(row.prefix)) {
-        errors.push(`Duplicate middle number prefix "${row.prefix}" found in Set ${setNum}, Row ${rIdx + 1}.`);
+        errors.push(`Duplicate prefix "${row.prefix}" found in Set ${setNum}, Row ${rIdx + 1}.`);
       }
       globalPrefixes.add(row.prefix);
 

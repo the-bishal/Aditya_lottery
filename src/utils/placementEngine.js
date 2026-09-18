@@ -69,17 +69,18 @@ export function validateNumberForRank(number, rank) {
       return { valid: false, reason: `1CR must be a series + 5-digit number (e.g. "AB 12345" or "12345")` };
     }
     case '2ND': {
-      if (/^\d{5}$/.test(s)) return { valid: true, reason: '' };
+      const digits = s.replace(/\D/g, '');
+      if (digits.length === 5) return { valid: true, reason: '' };
       return {
         valid: false,
-        reason: `2nd Prize requires exactly 5 digits (got "${s}" — ${s.replace(/\D/g, '').length} digit(s))`,
+        reason: `2nd Prize requires exactly 5 digits (got "${s}" — ${digits.length} digit(s))`,
       };
     }
     case '3RD':
     case '4TH':
     case '5TH': {
       const digits = s.replace(/\D/g, '');
-      if (/^\d{4}$/.test(s)) return { valid: true, reason: '' };
+      if (digits.length === 4) return { valid: true, reason: '' };
       return {
         valid: false,
         reason: `${rank} requires exactly 4 digits (got "${s}" — ${digits.length} digit(s))`,
@@ -154,8 +155,10 @@ export function placeWinners(currentOcrEntries, currentRankArrays) {
       return;
     }
 
-    // Normalize to uppercase for consistency
-    const normalizedNumber = number.trim();
+    // Normalize for consistency (clean digits for numeric ranks, uppercase for 1CR)
+    const normalizedNumber = ['2ND', '3RD', '4TH', '5TH'].includes(rank)
+      ? number.replace(/\D/g, '')
+      : number.trim().toUpperCase();
 
     // Duplicate check — within this rank only
     if (newRankArrays[rank].includes(normalizedNumber)) {
@@ -177,6 +180,13 @@ export function placeWinners(currentOcrEntries, currentRankArrays) {
     // All checks passed — place it
     newRankArrays[rank].push(normalizedNumber);
     placed.push({ number: normalizedNumber, rank });
+  });
+
+  // Keep numbers in ascending numerical order
+  ['2ND', '3RD', '4TH', '5TH'].forEach((r) => {
+    newRankArrays[r].sort(
+      (a, b) => Number(String(a).replace(/\D/g, '')) - Number(String(b).replace(/\D/g, ''))
+    );
   });
 
   return { rankArrays: newRankArrays, placed, skipped, invalid, capacityExceeded };
